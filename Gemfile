@@ -11,3 +11,4 @@ gem "rake", "~> 0.9.2"
 gem "whenever", "~> 0.6.8"
 gem "rspec", "~> 2.6.0"
 gem 'standalone_migrations'
+gem 'encryptor'

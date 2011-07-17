@@ -27,9 +27,14 @@ namespace :synchzor do
     puts "help will be here one day..."
   end
 
-  desc "setup"
-  task :setup do
-    puts "..."
+  desc "update application settings; use format thing=stuff as input"
+  task :set do
+    Synchzor.update_settings
+  end
+
+  desc "show_options"
+  task :show_options do
+    Synchzor.show_options
   end
 
   desc "test"
@@ -55,7 +60,8 @@ namespace :synchzor do
   desc "I will forget all settings and re-create the local database of folders, and the current state of your data folders will be kept"
   task :reset do
     Synchzor.delete_db
-    Rake::Task["db:migrate"].execute
+    ActiveRecord::Base.connection.reconnect!
+    Rake::Task["db:migrate"].invoke
     DEFAULT_LOGGER.info "New DB Created"
   end
 
