@@ -1,6 +1,6 @@
 require 'rubygems'
 require "#{File.dirname(__FILE__)}/config/initializers/rails_env"
-%w(gems logging settings models).each do |initializer|
+%w(gems logging models).each do |initializer|
   require "#{RAILS_ROOT}/config/initializers/#{initializer}"
 end
 
@@ -8,6 +8,12 @@ task :default => 'synchzor:help'
 
 task :environment do
   require "#{RAILS_ROOT}/app/environment"
+end
+
+begin
+  require 'tasks/standalone_migrations'
+rescue LoadError => e
+  puts "gem install standalone_migrations to get db:migrate:* tasks! (Error: #{e})"
 end
 
 namespace :synchzor do
@@ -48,7 +54,9 @@ namespace :synchzor do
 
   desc "I will forget all settings and re-create the local database of folders, and the current state of your data folders will be kept"
   task :reset do
-    Synchzor.reset
+    Synchzor.delete_db
+    Rake::Task["db:migrate"].execute
+    DEFAULT_LOGGER.info "New DB Created"
   end
 
 end

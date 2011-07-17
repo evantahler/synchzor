@@ -10,4 +10,4 @@ gem "fastercsv", "~> 1.5.4"
 gem "rake", "~> 0.9.2"
 gem "whenever", "~> 0.6.8"
 gem "rspec", "~> 2.6.0"
-gem 'mc-settings', '0.1.0'
+gem 'standalone_migrations'
