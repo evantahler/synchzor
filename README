@@ -1,0 +1,25 @@
+SynchZor
+
+SynchZor is a minimal ruby project that aims to emulate drop-box like functionality by synching files and folders across multiple computers.
+
+I can be run on demand by typing 'synch' at the command line of any directory
+I can be scheduled using cron or OSX playlists
+
+Install:
+- git-pull this project into ~/.synch
+- update .bashrc to alias 'synch' to '~/.synch/synch'
+
+I will create a sqlite database within ~/.synch which will store files and folders the synch process should manage
+
+At this time, I currently only work with Amazon's S3 storage system.  But, this is all open source, so perhaps someone will add another type of storage!
+
+
+
+setup:
+- git pull
+- rvm gemset create 'synchzor'
+- rvm install ruby-1.9.2-p180
+- cd ..
+- cd .synchzor
+- gem install bundler
+- bundle install
