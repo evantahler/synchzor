@@ -17,49 +17,25 @@ rescue LoadError => e
 end
 
 namespace :synchzor do
-  desc "RUN synchzor for known folders"
-  task :run => :environment do
-    Synchzor.run
+
+  desc "show what folders are synching"
+  task :show do
+    Synchzor.show
   end
 
-  desc "help"
-  task :help do
-    puts "help will be here one day..."
+  desc "add a folder to synchzor"
+  task :add  do
+    Synchzor.add
   end
 
-  desc "update application settings; use format thing=stuff as input"
-  task :set do
-    Synchzor.update_settings
+  desc "remove a folder to synchzor"
+  task :remove  do
+    Synchzor.remove
   end
 
-  desc "show_options"
-  task :show_options do
-    Synchzor.show_options
-  end
-
-  desc "test"
-  task :test do
-    Synchzor.test
-  end
-
-  desc "track and synch a folder"
-  task :learn_folder do
-    Synchzor.learn_folder
-  end
-
-  desc "stop synching a folder"
-  task :forget_folder do
-    Synchzor.forget_folder
-  end
-
-  desc "show the details about folders which are synced"
-  task :folder_details do
-    Synchzor.folder_details
-  end
-
-  desc "status"
-  task :status do
-    puts "..."
+  desc "sync with the server"
+  task :synch  do
+    Synchzor.synch
   end
 
   desc "I will forget all settings and re-create the local database of folders, and the current state of your data folders will be kept"

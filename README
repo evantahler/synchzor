@@ -23,3 +23,7 @@ setup:
 - cd .synchzor
 - gem install bundler
 - bundle install
+
+
+adding example:
+  rake synchzor:add local_folder=/Users/evantahler/Desktop/test_folder remote_folder=/home/theyellowdart/synchzor/test_folder username=theyellowdart host=### password=###
