@@ -158,6 +158,42 @@ class Synchzor < Object
         # remove lockfile on server
       sftp.remove! "#{sf.remote_folder}/.synchzor/lock_file.lock"
 
+      DEFAULT_LOGGER.info "Complete"
+    end
+  end
+
+  def self.remote_clean
+    self.start_connection
+    params = self.load_params
+    if params.count < 1
+      puts "please provide an id= or local_folder="
+      exit
+    end
+    sf = SynchFolder.where(params).first
+    if sf.nil?
+      puts "invalid input for a synched folder"
+      exit
+    end
+    DEFAULT_LOGGER.info "removing all files and folders from #{sf.remote_folder} @ #{sf.host}"
+    Net::SFTP.start(sf.host,sf.username, :password => sf.password) do |sftp|
+      remote_files = []
+      sftp.dir.glob(sf.remote_folder, "**/*") { |f| remote_files << f }
+      remote_files.each do |f|
+        if f.file?
+          DEFAULT_LOGGER.info "removing #{f.name} from the server (file)"
+          sftp.remove! "#{sf.remote_folder}/#{f.name}"
+        end
+      end
+      remote_folders = []
+      sftp.dir.glob(sf.remote_folder, "**/*") { |f| remote_folders << f }
+      remote_folders = remote_folders.sort_by {|x| -x.name.length}
+      remote_folders.each do |f|
+        if f.directory?
+          DEFAULT_LOGGER.info "removing #{f.name} from the server (dir)"
+          sftp.rmdir! "#{sf.remote_folder}/#{f.name}/"
+        end
+      end
+      sftp.remove! "#{sf.remote_folder}/.synchzor/manifest.json"
     end
   end
 

@@ -38,6 +38,17 @@ namespace :synchzor do
     Synchzor.synch
   end
 
+  desc "remove all files and records from the server for this synched folder"
+  task :remote_clean  do
+    Synchzor.remote_clean
+  end
+
+  desc "removes all files from the remote server, and then pushes the local copy (used to delete files)"
+  task :remote_reset  do
+    Rake::Task["synchzor:remote_clean"].invoke
+    Rake::Task["synchzor:synch"].invoke
+  end
+
   desc "I will forget all settings and re-create the local database of folders, and the current state of your data folders will be kept"
   task :reset do
     Synchzor.delete_db
