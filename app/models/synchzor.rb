@@ -33,10 +33,12 @@ class Synchzor < Object
       sftp.upload! lock_file, "#{sf.remote_folder}/.synchzor/lock_file.lock"
 
         # create hashes for local files, load updated_at timestamps from them
-      local_files = Dir.glob("#{sf.local_folder}/*")
+      local_files = []
+      Dir.glob( File.join(sf.local_folder, '**', '*') ) { |file| local_files << file }
       files = []
+      folders = []
       local_files.each do |f|
-        if !f.include?(".conflict")
+        if !f.include?(".conflict") && !File.directory?(f)
           l = f.dup
           l.sub!(sf.local_folder + "/","")
           l.sub!(sf.local_folder,"")
@@ -47,6 +49,21 @@ class Synchzor < Object
               "update_time" => File.mtime(f),
               "status" => nil
           }
+
+        end
+        if File.directory?(f)
+          l = f.dup
+          l.sub!(sf.local_folder + "/","")
+          l.sub!(sf.local_folder,"")
+          folders << l
+        end
+      end
+
+        # ensure all needed folders exist on the server
+      folders.each do |folder|
+        begin
+          sftp.mkdir! "#{sf.remote_folder}/#{folder}/"
+        rescue Net::SFTP::StatusException => e
         end
       end
 
@@ -83,9 +100,6 @@ class Synchzor < Object
         file["status"] = status
       end
 
-      ap files
-      ap remote_manifest
-
         # update locally new files to server
       DEFAULT_LOGGER.info " >>> Uploading locally newer files"
       files.each do |file|
@@ -104,6 +118,14 @@ class Synchzor < Object
           remote = "#{sf.remote_folder}/#{m["local_path"]}"
           local = "#{sf.local_folder}/#{m["local_path"]}"
           DEFAULT_LOGGER.info "downloading #{remote} to #{local}"
+          parts = m["local_path"].split("/")
+          if parts.count > 1
+            folder_needed = sf.local_folder
+            parts.each do |part|
+              folder_needed = "#{folder_needed}/#{part}"
+              Dir::mkdir(folder_needed) if !File.directory?(folder_needed) && part != parts[-1]
+            end
+          end
           sftp.download! remote, local
           files << {
               "full_path" => local,
