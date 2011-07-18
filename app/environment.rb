@@ -1,4 +1,4 @@
-RUNNING_APP_IDENTIFIER = "synchzor:run"
+RUNNING_APP_IDENTIFIER = "synchzor"
 
 def is_app_running?(term = RUNNING_APP_IDENTIFIER)
   sys_command = "ps -ef | grep '#{term}' | grep -v grep"
