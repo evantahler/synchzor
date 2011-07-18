@@ -4,7 +4,8 @@ class DBSetting < ActiveRecord::Base
     [
         "host",
         "name",
-        "password"
+        "password",
+        "path"
     ]
   end
 

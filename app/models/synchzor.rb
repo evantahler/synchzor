@@ -1,4 +1,5 @@
 class Synchzor < Object
+  require 'net/sftp'
 
   def self.run
     DEFAULT_LOGGER.info "Starting Synchzor"
@@ -33,6 +34,10 @@ class Synchzor < Object
 
   def self.show_options
     self.start_connection
+    puts "needed options:"
+    DBSetting.relevant_settings.each do |opt|
+      puts "  #{opt}"
+    end
     puts "Current Settings:"
     all_settings = DBSetting.all
     if all_settings.count > 0
@@ -42,7 +47,71 @@ class Synchzor < Object
     end
   end
 
+  def self.test
+    self.start_connection
+    self.param_load
+    if self.param_check
+      puts "starting connection test to #{@@host}"
+      tmp_file = "#{RAILS_ROOT}/tmp/test_file.txt"
+      tmp_download_file = "#{RAILS_ROOT}/tmp/test_file_downloaded.txt"
+      File.open(tmp_file, 'w') {|f| f.write("I am a test file from Synchzor") }
+      Net::SFTP.start(@@host,@@name, :password => @@password) do |sftp|
+        puts "connected! (Name and Password ok)"
+        remote_file = "#{@@path}/.tmp/test_file.txt"
+        self.create_remote_dir_from_file(remote_file, sftp)
+        puts "dir creation attempt OK"
+        sftp.upload! tmp_file, remote_file
+        puts "test file uploaded"
+        sftp.download! remote_file, tmp_download_file
+        puts "test file downloaded"
+        sftp.remove! remote_file
+        puts "remote file deleted"
+      end
+      File.delete(tmp_file)
+      File.delete(tmp_download_file)
+      puts "local test files deleted"
+      puts ""
+      puts "test OK!"
+    end
+  end
+
   private
+
+  def self.param_load
+    @@name = DBSetting.where(:key => "name").first.try(:value)
+    @@password = DBSetting.where(:key => "password").first.try(:value)
+    @@host = DBSetting.where(:key => "host").first.try(:value)
+    @@path = DBSetting.where(:key => "path").first.try(:value)
+  end
+
+  def self.param_check
+    if @@name.nil?
+      puts "name not set"
+      false
+    elsif @@password.nil?
+      puts "password not set"
+      false
+    elsif @@host.nil?
+      puts "host is not set"
+      false
+    elsif @@path.nil?
+      puts "path is not set"
+      false
+    else
+      true
+    end
+  end
+
+  def self.create_remote_dir_from_file(remote_file, sftp)
+    parts = remote_file.split("/")
+    parts.pop
+    remote_path = parts.join("/")
+    begin
+      sftp.mkdir! remote_path
+    rescue Net::SFTP::StatusException => e
+      puts "remote folder #{remote_path} exists already"
+    end
+  end
 
   def self.start_connection
     db_config = YAML::load(File.open("#{RAILS_ROOT}/db/config.yml"))

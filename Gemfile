@@ -12,3 +12,4 @@ gem "whenever", "~> 0.6.8"
 gem "rspec", "~> 2.6.0"
 gem 'standalone_migrations'
 gem 'encryptor'
+gem "net-sftp", "~> 2.0.5"

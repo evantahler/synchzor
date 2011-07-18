@@ -39,7 +39,7 @@ namespace :synchzor do
 
   desc "test"
   task :test do
-    puts "..."
+    Synchzor.test
   end
 
   desc "learn_folder"

@@ -11,7 +11,7 @@ Install:
 
 I will create a sqlite database within ~/.synch which will store files and folders the synch process should manage
 
-At this time, I currently only work with Amazon's S3 storage system.  But, this is all open source, so perhaps someone will add another type of storage!
+At this time, I currently only work over SFTP... but this is all open source, so perhaps someone will add another type of storage!
 
 
 
