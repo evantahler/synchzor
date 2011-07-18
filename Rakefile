@@ -42,14 +42,19 @@ namespace :synchzor do
     Synchzor.test
   end
 
-  desc "learn_folder"
-  task :add_folder do
-    puts "..."
+  desc "track and synch a folder"
+  task :learn_folder do
+    Synchzor.learn_folder
   end
 
-  desc "add_folder"
-  task :add_folder do
-    puts "..."
+  desc "stop synching a folder"
+  task :forget_folder do
+    Synchzor.forget_folder
+  end
+
+  desc "show the details about folders which are synced"
+  task :folder_details do
+    Synchzor.folder_details
   end
 
   desc "status"

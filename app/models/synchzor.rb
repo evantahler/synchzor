@@ -75,6 +75,50 @@ class Synchzor < Object
     end
   end
 
+  def self.folder_details
+    puts "folder details:"
+    self.start_connection
+    folders = SynchFolder.all
+    puts "#{folders.count} folders tracked"
+    folders.each do |folder|
+      puts "local_folder => #{folder.local_folder}, remote_folder => #{folder.remote_folder}, last_check_timestamp => #{folder.last_check_timestamp}"
+    end
+  end
+
+  def self.learn_folder
+    self.start_connection
+    folder = ARGV[1].dup
+    if folder
+      db_folder = SynchFolder.where(:local_folder => folder).first
+      if db_folder
+        puts "already tracking #{folder}, skipping"
+      else
+        sf = SynchFolder.create(:local_folder => folder)
+        sf.save
+        puts "#{folder} added"
+      end
+    else
+      puts "please provide a folder"
+    end
+  end
+
+  def self.forget_folder
+    self.start_connection
+    folder = ARGV[1].dup
+    if folder
+      db_folder = SynchFolder.where(:local_folder => folder).first
+      if !db_folder
+        puts "not tracking #{folder}"
+      else
+        sf = SynchFolder.where(:local_folder => folder).first
+        sf.delete
+        puts "#{folder} removed"
+      end
+    else
+      puts "please provide a folder"
+    end
+  end
+
   private
 
   def self.param_load
