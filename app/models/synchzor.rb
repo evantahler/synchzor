@@ -62,20 +62,29 @@ class Synchzor < Object
       files.each do |file|
         status = "local_new"
         remote_manifest.each do |m|
-          m["needed?"] = false
-          if m["md5"] == file["md5"]
-            status = "same"
-          elsif m["needed?"].nil? && m["local_path"] = file["local_path"] && m["md5"] != file["md5"]
-            if file["update_time"] > m["update_time"].to_datetime
-              status = "server_new"
-              m["needed?"] = true
+          if m["needed?"].nil? && m["local_path"] == file["local_path"]
+            if m["md5"] == file["md5"]
+              status = "same"
+              m["needed?"] = false
+              break
+            elsif m["md5"] != file["md5"]
+              if file["update_time"] > m["update_time"].to_datetime
+                status = "server_new"
+                m["needed?"] = true
+              end
+              if file["update_time"] <= m["update_time"].to_datetime
+                status = "conflict"
+                m["needed?"] = true
+              end
+              break
             end
-            status = "conflict" if file["update_time"] <= m["update_time"].to_datetime
-            break
           end
         end
         file["status"] = status
       end
+
+      ap files
+      ap remote_manifest
 
         # update locally new files to server
       DEFAULT_LOGGER.info " >>> Uploading locally newer files"
@@ -91,11 +100,18 @@ class Synchzor < Object
         # pull new files from server and add/overwrite
       DEFAULT_LOGGER.info " >>> Downloading server newer files"
       remote_manifest.each do |m|
-        if m["needed?"] == true
+        if m["needed?"] == true || m["needed?"].nil? #nil = a file the server has but it not local
           remote = "#{sf.remote_folder}/#{m["local_path"]}"
           local = "#{sf.local_folder}/#{m["local_path"]}"
           DEFAULT_LOGGER.info "downloading #{remote} to #{local}"
           sftp.download! remote, local
+          files << {
+              "full_path" => local,
+              "local_path" => m["local_path"],
+              "md5" => Digest::MD5.hexdigest(File.read(local)),
+              "update_time" => File.mtime(local),
+              "status" => nil
+          }
         end
       end
 
