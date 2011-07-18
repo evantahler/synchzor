@@ -15,7 +15,12 @@ class Synchzor < Object
       exit
     end
     DEFAULT_LOGGER.info "Synching #{sf.local_folder} to #{sf.remote_folder} @ #{sf.host}"
+
     lock_file = "#{RAILS_ROOT}/tmp/lock_file.lock"
+    local_manifest_file = "#{RAILS_ROOT}/tmp/local_manifest.json"
+    remote_manifest_file = "#{RAILS_ROOT}/tmp/remote_manifest.json"
+    server_manifest_file = "#{sf.remote_folder}/.synchzor/manifest.json"
+
     File.open(lock_file, 'w') {|f| f.write("I am a lock file from Synchzor") }
     Net::SFTP.start(sf.host,sf.username, :password => sf.password) do |sftp|
       #check if there is a lock file on the server; exit if so
@@ -31,59 +36,86 @@ class Synchzor < Object
       local_files = Dir.glob("#{sf.local_folder}/*")
       files = []
       local_files.each do |f|
-        l = f.dup
-        l.sub!(sf.local_folder + "/","")
-        l.sub!(sf.local_folder,"")
-        files << {
-            :full_path => f,
-            :local_path => l,
-            :md5 => Digest::MD5.hexdigest(File.read(f)),
-            :update_time => File.mtime(f),
-            :status => nil
-        }
+        if !f.include?(".conflict")
+          l = f.dup
+          l.sub!(sf.local_folder + "/","")
+          l.sub!(sf.local_folder,"")
+          files << {
+              "full_path" => f,
+              "local_path" => l,
+              "md5" => Digest::MD5.hexdigest(File.read(f)),
+              "update_time" => File.mtime(f),
+              "status" => nil
+          }
+        end
       end
 
         # download the remote manifest
       remote_manifest = []
-      if self.sftp_file_exists("#{sf.remote_folder}/.synchzor/", "manifest", sftp)
-        sftp.download "#{sf.remote_folder}/.synchzor/manifest", "#{RAILS_ROOT}/tmp/remote_manifest"
-        remote_manifest = JSON.parse(File.read("#{RAILS_ROOT}/tmp/remote_manifest"))
+      if self.sftp_file_exists("#{sf.remote_folder}/.synchzor/", "manifest.json", sftp)
+        DEFAULT_LOGGER.info " >>> copying remote manifest from #{server_manifest_file} to #{remote_manifest_file}"
+        sftp.download! server_manifest_file, remote_manifest_file
+        remote_manifest = JSON.parse(File.read(remote_manifest_file))
       end
 
-        # compare local files to manifest (files are local_new, server_new, conflict)
+        # compare local files to manifest (files are same, local_new, server_new, conflict)
       files.each do |file|
         status = "local_new"
         remote_manifest.each do |m|
-          if m[:needed?].nil? && m.local_path = file[:local_path] && m[:md5] != file[:md5]
-            m[:needed?] = false
-            if file[:update_time] > m[:update_time]
+          m["needed?"] = false
+          if m["md5"] == file["md5"]
+            status = "same"
+          elsif m["needed?"].nil? && m["local_path"] = file["local_path"] && m["md5"] != file["md5"]
+            if file["update_time"] > m["update_time"].to_datetime
               status = "server_new"
-              m[:needed?] = true
+              m["needed?"] = true
             end
-            status = "conflict" if file[:update_time] <= m[:update_time]
+            status = "conflict" if file["update_time"] <= m["update_time"].to_datetime
             break
           end
         end
-        file[:status] = status
+        file["status"] = status
       end
 
         # update locally new files to server
       DEFAULT_LOGGER.info " >>> Uploading locally newer files"
       files.each do |file|
-        if file[:status] == "local_new"
-          DEFAULT_LOGGER.info "uploading #{file[:full_path]} to #{sf.remote_folder}/#{file[:local_path]}"
-          sftp.upload file[:full_path], "#{sf.remote_folder}/#{file[:local_path]}"
+        if file["status"] == "local_new"
+          local = file["full_path"]
+          remote = "#{sf.remote_folder}/#{file["local_path"]}"
+          DEFAULT_LOGGER.info "uploading #{local} to #{remote}"
+          sftp.upload! local, remote
         end
       end
 
         # pull new files from server and add/overwrite
+      DEFAULT_LOGGER.info " >>> Downloading server newer files"
+      remote_manifest.each do |m|
+        if m["needed?"] == true
+          remote = "#{sf.remote_folder}/#{m["local_path"]}"
+          local = "#{sf.local_folder}/#{m["local_path"]}"
+          DEFAULT_LOGGER.info "downloading #{remote} to #{local}"
+          sftp.download! remote, local
+        end
+      end
 
         # pull conflicting files from server and append .conflict to them
+      DEFAULT_LOGGER.info " >>> Downloading conflicting files (will have .conflict appended to the name)"
+      files.each do |file|
+        if file["status"] == "conflict"
+          local = file["full_path"] + ".conflict"
+          remote = "#{sf.remote_folder}/#{file["local_path"]}"
+          DEFAULT_LOGGER.info "downloading #{local} to #{remote}"
+          sftp.download! remote, local
+        end
+      end
 
         # generate manifest and push to server
       files.each do |file|
-        file[:status] = nil
+        file["status"] = nil
       end
+      File.open(local_manifest_file, 'w') {|f| f.write(files.to_json) }
+      sftp.upload! local_manifest_file, server_manifest_file
 
         # remove lockfile on server
       sftp.remove! "#{sf.remote_folder}/.synchzor/lock_file.lock"
