@@ -38,6 +38,11 @@ namespace :synchzor do
     Synchzor.synch
   end
 
+  desc "sync all known folders with the server"
+  task :synch_all  do
+    Synchzor.synch_all
+  end
+
   desc "remove all files and records from the server for this synched folder"
   task :remote_clean  do
     Synchzor.remote_clean

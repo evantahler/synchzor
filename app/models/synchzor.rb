@@ -2,9 +2,9 @@ class Synchzor < Object
   require 'net/sftp'
   require "digest"
 
-  def self.synch
+  def self.synch(params = nil)
     self.start_connection
-    params = self.load_params
+    params = self.load_params if params.nil?
     if params.count < 1
       puts "please provide an id= or local_folder="
       exit
@@ -47,6 +47,7 @@ class Synchzor < Object
               "local_path" => l,
               "md5" => Digest::MD5.hexdigest(File.read(f)),
               "update_time" => File.mtime(f),
+              "access_time" => File.atime(f),
               "status" => nil
           }
 
@@ -75,7 +76,7 @@ class Synchzor < Object
         remote_manifest = JSON.parse(File.read(remote_manifest_file))
       end
 
-        # compare local files to manifest (files are same, local_new, server_new, conflict)
+        # compare local files to manifest (files are same, local_new, local_deleted, server_new, conflict)
       files.each do |file|
         status = "local_new"
         remote_manifest.each do |m|
@@ -111,29 +112,36 @@ class Synchzor < Object
         end
       end
 
-        # pull new files from server and add/overwrite
-      DEFAULT_LOGGER.info " >>> Downloading server newer files"
+        # pull new files from server and add/overwrite and deal with locally deleted files
+      DEFAULT_LOGGER.info " >>> Downloading server newer files and noting local deletions"
       remote_manifest.each do |m|
         if m["needed?"] == true || m["needed?"].nil? #nil = a file the server has but it not local
           remote = "#{sf.remote_folder}/#{m["local_path"]}"
           local = "#{sf.local_folder}/#{m["local_path"]}"
-          DEFAULT_LOGGER.info "downloading #{remote} to #{local}"
-          parts = m["local_path"].split("/")
-          if parts.count > 1
-            folder_needed = sf.local_folder
-            parts.each do |part|
-              folder_needed = "#{folder_needed}/#{part}"
-              Dir::mkdir(folder_needed) if !File.directory?(folder_needed) && part != parts[-1]
+          if m["access_time"].to_datetime > sf.last_sync_timestamp
+            ap m["access_time"].to_datetime
+            ap sf.last_sync_timestamp
+            DEFAULT_LOGGER.info "downloading #{remote} to #{local}"
+            parts = m["local_path"].split("/")
+            if parts.count > 1
+              folder_needed = sf.local_folder
+              parts.each do |part|
+                folder_needed = "#{folder_needed}/#{part}"
+                Dir::mkdir(folder_needed) if !File.directory?(folder_needed) && part != parts[-1]
+              end
             end
+            sftp.download! remote, local
+            files << {
+                "full_path" => local,
+                "local_path" => m["local_path"],
+                "md5" => Digest::MD5.hexdigest(File.read(local)),
+                "update_time" => File.mtime(local),
+                "status" => nil
+            }
+          else
+            DEFAULT_LOGGER.info "removing #{remote} from server"
+            sftp.remove! remote
           end
-          sftp.download! remote, local
-          files << {
-              "full_path" => local,
-              "local_path" => m["local_path"],
-              "md5" => Digest::MD5.hexdigest(File.read(local)),
-              "update_time" => File.mtime(local),
-              "status" => nil
-          }
         end
       end
 
@@ -157,9 +165,12 @@ class Synchzor < Object
 
         # remove lockfile on server
       sftp.remove! "#{sf.remote_folder}/.synchzor/lock_file.lock"
-
-      DEFAULT_LOGGER.info "Complete"
     end
+
+    sf.last_sync_timestamp = Time.now
+    sf.save
+    DEFAULT_LOGGER.info "Complete"
+
   end
 
   def self.remote_clean

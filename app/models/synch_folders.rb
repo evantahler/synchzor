@@ -2,7 +2,7 @@ class SynchFolder < ActiveRecord::Base
   require 'net/sftp'
 
   validates_presence_of :local_folder
-  validates_presence_of :remote_folder
+  #validates_presence_of :remote_folder
   validates_presence_of :username
   validates_presence_of :host
   validates_presence_of :password
@@ -27,7 +27,7 @@ class SynchFolder < ActiveRecord::Base
       if connected == false
         errors.add(:password, "cannot connect using these settings")
       else
-        puts "ensuring #{self.remote_folder} exists on #{self.host}"
+        #puts "ensuring #{self.remote_folder} exists on #{self.host}"
         begin
           Net::SFTP.start(self.host,self.username, :password => self.password) do |sftp|
             sftp.mkdir! self.remote_folder
@@ -41,7 +41,8 @@ class SynchFolder < ActiveRecord::Base
 
   def complete_entry_with_defaults
     self.port = 22 if self.port.nil?
-    self.last_sync_timestamp = Time.at(0)
+    self.remote_folder = "~/synchzor/" if self.remote_folder.nil?
+    self.last_sync_timestamp = Time.at(0) unless self.last_sync_timestamp
   end
 
   def self.col_names_array
