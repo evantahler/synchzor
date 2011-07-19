@@ -1,25 +1,32 @@
 SynchZor
 
-SynchZor is a minimal ruby project that aims to emulate drop-box like functionality by synching files and folders across multiple computers.
+SynchZor is a ruby project that aims to emulate DropBox-like functionality by synching files and folders across multiple computers. This tool is suited for making backups, or for sharing files and folders.
 
 Features:
-- no extra software to install on the server (just SSH, SFTP)
+- you own the server; you own the data!
+- no central account server/service.
+- no fees (just your server)
+- no extra software to install on the server (just SSH and SFTP needed)
 - uses unix user management on server
 - favors updates, is safe about deletes
-- not versioned (to safe time and space)
-- no metadata files or folders created in your project
+- uploaded files are not versioned (to save time and space)
+- no metadata files or folders created in your project (data stored in sqlite database on your machine)
+- files stored on server in accessible manner with folder hierarchy maintained
 - logged
 
+Requirements:
+- Ruby 1.8.7+
+- Bundler
 
-I can be scheduled using cron or OSX playlists
+I can be run on request (like git or svn), or I can be scheduled using cron or OSX playlists.
 
 Install:
-- git-pull this project into ~/.synch
-- update .bashrc to alias 'synch' to '~/.synch/synch'
+coming soon...
 
-I will create a sqlite database within ~/.synch which will store files and folders the synch process should manage
+Guide:
+coming soon...
 
-At this time, I currently only work over SFTP... but this is all open source, so perhaps someone will add another type of storage!
+
 
 
 
