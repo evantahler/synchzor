@@ -19,7 +19,8 @@ class SynchFolder < ActiveRecord::Base
   end
 
   def try_to_connect_and_ensure_remote_folder
-    if self.host && self.username && self.password
+    if self.host && self.username && self.password && self.last_sync_timestamp.nil?
+      self.remote_folder = "synchzor/#{self.local_folder.split("/").last}" if self.remote_folder.nil?
       connected = false
       Net::SFTP.start(self.host,self.username, :password => self.password) do |sftp|
         connected = true
@@ -27,10 +28,15 @@ class SynchFolder < ActiveRecord::Base
       if connected == false
         errors.add(:password, "cannot connect using these settings")
       else
-        #puts "ensuring #{self.remote_folder} exists on #{self.host}"
+        puts "ensuring #{self.remote_folder} exists on #{self.host}"
         begin
           Net::SFTP.start(self.host,self.username, :password => self.password) do |sftp|
-            sftp.mkdir! self.remote_folder
+            parts = self.remote_folder.split("/")
+            composite = ""
+            parts.each do |part|
+              composite = composite + part + "/"
+              sftp.mkdir! composite
+            end
             sftp.mkdir! self.remote_folder + "/.synchzor/"
           end
         rescue Net::SFTP::StatusException => e
@@ -41,7 +47,6 @@ class SynchFolder < ActiveRecord::Base
 
   def complete_entry_with_defaults
     self.port = 22 if self.port.nil?
-    self.remote_folder = "~/synchzor/" if self.remote_folder.nil?
     self.last_sync_timestamp = Time.at(0) unless self.last_sync_timestamp
   end
 
