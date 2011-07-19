@@ -20,6 +20,8 @@ class Synchzor < Object
     local_manifest_file = "#{RAILS_ROOT}/tmp/local_manifest.json"
     remote_manifest_file = "#{RAILS_ROOT}/tmp/remote_manifest.json"
     server_manifest_file = "#{sf.remote_folder}/.synchzor/manifest.json"
+    remote_deleted_file = "#{RAILS_ROOT}/tmp/removed_files.json"
+    server_deleted_file = "#{sf.remote_folder}/.synchzor/removed_files.json"
 
     File.open(lock_file, 'w') {|f| f.write("I am a lock file from Synchzor") }
     Net::SFTP.start(sf.host,sf.username, :password => sf.password) do |sftp|
@@ -31,6 +33,29 @@ class Synchzor < Object
 
         # place lockfile on server
       sftp.upload! lock_file, "#{sf.remote_folder}/.synchzor/lock_file.lock"
+
+        # download the remote manifest and removed file list
+      remote_manifest = []
+      deleted_list = []
+      if self.sftp_file_exists("#{sf.remote_folder}/.synchzor/", "manifest.json", sftp)
+        DEFAULT_LOGGER.info " >>> copying remote manifests"
+        sftp.download! server_manifest_file, remote_manifest_file
+        sftp.download! server_deleted_file, remote_deleted_file
+        remote_manifest = JSON.parse(File.read(remote_manifest_file))
+        deleted_list = JSON.parse(File.read(remote_deleted_file))
+      end
+
+        # delete local files which the server says to delete
+      DEFAULT_LOGGER.info " >>> deleting local files per server"
+      deleted_list.each do |deleted_file|
+        local_file = "#{sf.local_folder}/#{deleted_file["local_path"]}"
+        if File.file?(local_file) && File.atime(local_file) <= sf.last_sync_timestamp
+          DEFAULT_LOGGER.info "removing #{local_file}"
+          File.delete(local_file)
+        elsif File.file?(local_file) && File.atime(local_file) > sf.last_sync_timestamp
+          deleted_list.delete_if {|hash| hash["local_path"] == deleted_file["local_path"] }
+        end
+      end
 
         # create hashes for local files, load updated_at timestamps from them
       local_files = []
@@ -66,14 +91,6 @@ class Synchzor < Object
           sftp.mkdir! "#{sf.remote_folder}/#{folder}/"
         rescue Net::SFTP::StatusException => e
         end
-      end
-
-        # download the remote manifest
-      remote_manifest = []
-      if self.sftp_file_exists("#{sf.remote_folder}/.synchzor/", "manifest.json", sftp)
-        DEFAULT_LOGGER.info " >>> copying remote manifest from #{server_manifest_file} to #{remote_manifest_file}"
-        sftp.download! server_manifest_file, remote_manifest_file
-        remote_manifest = JSON.parse(File.read(remote_manifest_file))
       end
 
         # compare local files to manifest (files are same, local_new, local_deleted, server_new, conflict)
@@ -119,8 +136,6 @@ class Synchzor < Object
           remote = "#{sf.remote_folder}/#{m["local_path"]}"
           local = "#{sf.local_folder}/#{m["local_path"]}"
           if m["access_time"].to_datetime > sf.last_sync_timestamp
-            ap m["access_time"].to_datetime
-            ap sf.last_sync_timestamp
             DEFAULT_LOGGER.info "downloading #{remote} to #{local}"
             parts = m["local_path"].split("/")
             if parts.count > 1
@@ -136,11 +151,16 @@ class Synchzor < Object
                 "local_path" => m["local_path"],
                 "md5" => Digest::MD5.hexdigest(File.read(local)),
                 "update_time" => File.mtime(local),
+                "access_time" => m["access_time"],
                 "status" => nil
             }
           else
             DEFAULT_LOGGER.info "removing #{remote} from server"
             sftp.remove! remote
+            deleted_list << {
+                "local_path" => m["local_path"],
+                "timestamp" => Time.now
+            }
           end
         end
       end
@@ -162,6 +182,9 @@ class Synchzor < Object
       end
       File.open(local_manifest_file, 'w') {|f| f.write(files.to_json) }
       sftp.upload! local_manifest_file, server_manifest_file
+
+      File.open(remote_deleted_file, 'w') {|f| f.write(deleted_list.to_json) }
+      sftp.upload! remote_deleted_file, server_deleted_file
 
         # remove lockfile on server
       sftp.remove! "#{sf.remote_folder}/.synchzor/lock_file.lock"
