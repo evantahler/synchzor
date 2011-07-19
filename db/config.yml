@@ -1,0 +1,4 @@
+synchzor:
+  adapter: sqlite3
+  database: db/synchzor
+  timeout: 5000
