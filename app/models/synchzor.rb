@@ -294,6 +294,11 @@ class Synchzor < Object
     DEFAULT_LOGGER.info "Old DB Deleted"
   end
 
+  def self.start_connection
+    db_config = YAML::load(File.open("#{RAILS_ROOT}/db/config.yml"))
+    ActiveRecord::Base.establish_connection(db_config['synchzor'])
+  end
+
   private
 
   def self.sftp_file_exists(path, file, sftp)
@@ -314,11 +319,6 @@ class Synchzor < Object
       end
     end
     params
-  end
-
-  def self.start_connection
-    db_config = YAML::load(File.open("#{RAILS_ROOT}/db/config.yml"))
-    ActiveRecord::Base.establish_connection(db_config['synchzor'])
   end
 
 end

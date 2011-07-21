@@ -79,11 +79,13 @@ remote_reset: removes all files from the remote server, and then pushes the loca
   end
 
   def self.setup
+    Synchzor.start_connection
     ActiveRecord::Base.connection.reconnect!
     ActiveRecord::Migrator.migrate('db/migrate')
   end
 
   def self.reset
+    Synchzor.start_connection
     Synchzor.delete_db
     ActiveRecord::Base.connection.reconnect!
     ActiveRecord::Migrator.migrate('db/migrate')
