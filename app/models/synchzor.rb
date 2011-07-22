@@ -59,10 +59,15 @@ class Synchzor < Object
       DEFAULT_LOGGER.info " >>> deleting local files per server"
       deleted_list.each do |deleted_file|
         local_file = "#{sf['local_folder']}/#{deleted_file["local_path"]}"
-        if File.file?(local_file) && File.atime(local_file) <= sf['last_sync_timestamp']
+        if File.file?(local_file) && File.atime(local_file) <= sf['last_sync_timestamp'].to_datetime
+          local_delete_dir = File.dirname(local_file)
           DEFAULT_LOGGER.info "removing #{local_file}"
           File.delete(local_file)
-        elsif File.file?(local_file) && File.atime(local_file) > sf['last_sync_timestamp']
+          if Dir["#{local_delete_dir}/*"].count == 0
+            DEFAULT_LOGGER.info "removing #{local_delete_dir} as it is now empty"
+            Dir.delete(local_delete_dir)
+          end
+        elsif File.file?(local_file) && File.atime(local_file) > sf['last_sync_timestamp'].to_datetime
           deleted_list.delete_if {|hash| hash["local_path"] == deleted_file["local_path"] }
         end
       end
