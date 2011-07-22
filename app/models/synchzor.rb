@@ -10,11 +10,13 @@ class Synchzor < Object
     params = self.load_params
     found = false
     sf = {}
+    new_db = []
     @DB.each do |sf_|
       if params["local_folder"] == sf_["local_folder"]
         found = true
         sf = sf_.dup
-        break
+      else
+        new_db << sf_
       end
     end
     unless found
@@ -199,6 +201,8 @@ class Synchzor < Object
     end
 
     sf['last_sync_timestamp'] = Time.now
+    new_db << sf
+    @DB = new_db
     self.save_db
 
     DEFAULT_LOGGER.info "Complete"
