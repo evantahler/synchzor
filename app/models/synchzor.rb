@@ -2,42 +2,50 @@ class Synchzor < Object
   require 'net/sftp'
   require "digest"
 
+  DB_FILE = "db/synchzor"
+
   def self.synch(params = nil)
-    self.start_connection
-    params = self.load_params if params.nil?
-    if params.count < 1
-      puts "please provide an id= or local_folder="
+
+    self.load_db
+    params = self.load_params
+    found = false
+    sf = {}
+    @DB.each do |sf_|
+      if params["local_folder"] == sf_["local_folder"]
+        found = true
+        sf = sf_.dup
+        break
+      end
+    end
+    unless found
+      puts "this local_folder is not found, and not not being synched"
       exit
     end
-    sf = SynchFolder.where(params).first
-    if sf.nil?
-      puts "invalid input for a synched folder"
-      exit
-    end
-    DEFAULT_LOGGER.info "Synching #{sf.local_folder} to #{sf.remote_folder} @ #{sf.host}"
+
+    DEFAULT_LOGGER.info "Synching #{sf['local_folder']} to #{sf['remote_folder']} @ #{sf['host']}"
 
     lock_file = "#{RAILS_ROOT}/tmp/lock_file.lock"
     local_manifest_file = "#{RAILS_ROOT}/tmp/local_manifest.json"
     remote_manifest_file = "#{RAILS_ROOT}/tmp/remote_manifest.json"
-    server_manifest_file = "#{sf.remote_folder}/.synchzor/manifest.json"
+    server_manifest_file = "#{sf['remote_folder']}/.synchzor/manifest.json"
     remote_deleted_file = "#{RAILS_ROOT}/tmp/removed_files.json"
-    server_deleted_file = "#{sf.remote_folder}/.synchzor/removed_files.json"
+    server_deleted_file = "#{sf['remote_folder']}/.synchzor/removed_files.json"
 
     File.open(lock_file, 'w') {|f| f.write("I am a lock file from Synchzor") }
-    Net::SFTP.start(sf.host,sf.username, :password => sf.password) do |sftp|
+    Net::SFTP.start(sf['host'],sf['username'], :password => sf['password']) do |sftp|
       #check if there is a lock file on the server; exit if so
-      if self.sftp_file_exists("#{sf.remote_folder}/.synchzor/", "lock_file.lock", sftp)
+      if self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", "lock_file.lock", sftp)
         DEFAULT_LOGGER.info "remote directory is locked (probably someone else is synching). exiting"
         exit
       end
 
         # place lockfile on server
-      sftp.upload! lock_file, "#{sf.remote_folder}/.synchzor/lock_file.lock"
+      sftp.upload! lock_file, "#{sf['remote_folder']}/.synchzor/lock_file.lock"
 
         # download the remote manifest and removed file list
       remote_manifest = []
       deleted_list = []
-      if self.sftp_file_exists("#{sf.remote_folder}/.synchzor/", "manifest.json", sftp)
+      if self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", "manifest.json", sftp)
         DEFAULT_LOGGER.info " >>> copying remote manifests"
         sftp.download! server_manifest_file, remote_manifest_file
         sftp.download! server_deleted_file, remote_deleted_file
@@ -48,25 +56,25 @@ class Synchzor < Object
         # delete local files which the server says to delete
       DEFAULT_LOGGER.info " >>> deleting local files per server"
       deleted_list.each do |deleted_file|
-        local_file = "#{sf.local_folder}/#{deleted_file["local_path"]}"
-        if File.file?(local_file) && File.atime(local_file) <= sf.last_sync_timestamp
+        local_file = "#{sf['local_folder']}/#{deleted_file["local_path"]}"
+        if File.file?(local_file) && File.atime(local_file) <= sf['last_sync_timestamp']
           DEFAULT_LOGGER.info "removing #{local_file}"
           File.delete(local_file)
-        elsif File.file?(local_file) && File.atime(local_file) > sf.last_sync_timestamp
+        elsif File.file?(local_file) && File.atime(local_file) > sf['last_sync_timestamp']
           deleted_list.delete_if {|hash| hash["local_path"] == deleted_file["local_path"] }
         end
       end
 
         # create hashes for local files, load updated_at timestamps from them
       local_files = []
-      Dir.glob( File.join(sf.local_folder, '**', '*') ) { |file| local_files << file }
+      Dir.glob( File.join(sf['local_folder'], '**', '*') ) { |file| local_files << file }
       files = []
       folders = []
       local_files.each do |f|
         if !f.include?(".conflict") && !File.directory?(f)
           l = f.dup
-          l.sub!(sf.local_folder + "/","")
-          l.sub!(sf.local_folder,"")
+          l.sub!(sf['local_folder'] + "/","")
+          l.sub!(sf['local_folder'],"")
           files << {
               "full_path" => f,
               "local_path" => l,
@@ -79,8 +87,8 @@ class Synchzor < Object
         end
         if File.directory?(f)
           l = f.dup
-          l.sub!(sf.local_folder + "/","")
-          l.sub!(sf.local_folder,"")
+          l.sub!(sf['local_folder'] + "/","")
+          l.sub!(sf['local_folder'],"")
           folders << l
         end
       end
@@ -88,7 +96,7 @@ class Synchzor < Object
         # ensure all needed folders exist on the server
       folders.each do |folder|
         begin
-          sftp.mkdir! "#{sf.remote_folder}/#{folder}/"
+          sftp.mkdir! "#{sf['remote_folder']}/#{folder}/"
         rescue Net::SFTP::StatusException => e
         end
       end
@@ -123,7 +131,7 @@ class Synchzor < Object
       files.each do |file|
         if file["status"] == "local_new"
           local = file["full_path"]
-          remote = "#{sf.remote_folder}/#{file["local_path"]}"
+          remote = "#{sf['remote_folder']}/#{file["local_path"]}"
           DEFAULT_LOGGER.info "uploading #{local} to #{remote}"
           sftp.upload! local, remote
         end
@@ -133,13 +141,13 @@ class Synchzor < Object
       DEFAULT_LOGGER.info " >>> Downloading server newer files and noting local deletions"
       remote_manifest.each do |m|
         if m["needed?"] == true || m["needed?"].nil? #nil = a file the server has but it not local
-          remote = "#{sf.remote_folder}/#{m["local_path"]}"
-          local = "#{sf.local_folder}/#{m["local_path"]}"
-          if m["access_time"].to_datetime > sf.last_sync_timestamp
+          remote = "#{sf['remote_folder']}/#{m["local_path"]}"
+          local = "#{sf['local_folder']}/#{m["local_path"]}"
+          if m["access_time"].to_datetime > sf['last_sync_timestamp']
             DEFAULT_LOGGER.info "downloading #{remote} to #{local}"
             parts = m["local_path"].split("/")
             if parts.count > 1
-              folder_needed = sf.local_folder
+              folder_needed = sf['local_folder']
               parts.each do |part|
                 folder_needed = "#{folder_needed}/#{part}"
                 Dir::mkdir(folder_needed) if !File.directory?(folder_needed) && part != parts[-1]
@@ -170,7 +178,7 @@ class Synchzor < Object
       files.each do |file|
         if file["status"] == "conflict"
           local = file["full_path"] + ".conflict"
-          remote = "#{sf.remote_folder}/#{file["local_path"]}"
+          remote = "#{sf['remote_folder']}/#{file["local_path"]}"
           DEFAULT_LOGGER.info "downloading #{local} to #{remote}"
           sftp.download! remote, local
         end
@@ -187,92 +195,144 @@ class Synchzor < Object
       sftp.upload! remote_deleted_file, server_deleted_file
 
         # remove lockfile on server
-      sftp.remove! "#{sf.remote_folder}/.synchzor/lock_file.lock"
+      sftp.remove! "#{sf['remote_folder']}/.synchzor/lock_file.lock"
     end
 
-    sf.last_sync_timestamp = Time.now
-    sf.save
+    sf['last_sync_timestamp'] = Time.now
+    self.save_db
+
     DEFAULT_LOGGER.info "Complete"
 
   end
 
   def self.remote_clean
-    self.start_connection
+    self.load_db
     params = self.load_params
-    if params.count < 1
-      puts "please provide an id= or local_folder="
+    found = false
+    sf = {}
+    @DB.each do |sf_|
+      if params["local_folder"] == sf_["local_folder"]
+        found = true
+        sf = sf_.dup
+        break
+      end
+    end
+    unless found
+      puts "this local_folder is not found, and not not being synched"
       exit
     end
-    sf = SynchFolder.where(params).first
-    if sf.nil?
-      puts "invalid input for a synched folder"
-      exit
-    end
-    DEFAULT_LOGGER.info "removing all files and folders from #{sf.remote_folder} @ #{sf.host}"
-    Net::SFTP.start(sf.host,sf.username, :password => sf.password) do |sftp|
+
+    DEFAULT_LOGGER.info "removing all files and folders from #{sf['remote_folder']} @ #{sf['host']}"
+    Net::SFTP.start(sf['host'],sf['username'], :password => sf['password']) do |sftp|
       remote_files = []
-      sftp.dir.glob(sf.remote_folder, "**/*") { |f| remote_files << f }
+      sftp.dir.glob(sf['remote_folder'], "**/*") { |f| remote_files << f }
       remote_files.each do |f|
         if f.file?
           DEFAULT_LOGGER.info "removing #{f.name} from the server (file)"
-          sftp.remove! "#{sf.remote_folder}/#{f.name}"
+          sftp.remove! "#{sf['remote_folder']}/#{f.name}"
         end
       end
       remote_folders = []
-      sftp.dir.glob(sf.remote_folder, "**/*") { |f| remote_folders << f }
+      sftp.dir.glob(sf['remote_folder'], "**/*") { |f| remote_folders << f }
       remote_folders = remote_folders.sort_by {|x| -x.name.length}
       remote_folders.each do |f|
         if f.directory?
           DEFAULT_LOGGER.info "removing #{f.name} from the server (dir)"
-          sftp.rmdir! "#{sf.remote_folder}/#{f.name}/"
+          sftp.rmdir! "#{sf['remote_folder']}/#{f.name}/"
         end
       end
-      sftp.remove! "#{sf.remote_folder}/.synchzor/manifest.json"
+      manifest = "#{sf['remote_folder']}/.synchzor/manifest.json"
+      begin
+        sftp.remove! manifest
+      rescue
+      end
     end
   end
 
   def self.show
-    self.start_connection
+    self.load_db
     puts "folders being synched:"
-    SynchFolder.all.each do |folder|
-      str = ""
-      SynchFolder.col_names_array.each do |col|
-        str << "#{col}: #{folder[col]} | "
-      end
-      puts str
+    @DB.each do |folder|
+      ap folder
     end
   end
 
   def self.add
-    self.start_connection
+    self.load_db
     params = self.load_params
-    if params["local_folder"] && SynchFolder.where(:local_folder => params["local_folder"]).count > 0
-      puts "this folder is already being tracked; exiting"
+    ["local_folder","username","host","password"].each do |req|
+      unless params.include?(req)
+        puts "#{req} is required to create a new synch folder"
+        exit
+      end
+    end
+    if File.directory?(params['local_folder']) == false
+      puts "local_folder doesn't exist of cannot be accessed"
       exit
     end
-    sf = SynchFolder.create(params)
-    sf.save
-    if sf.errors.count > 0
-      sf.errors.each do |k,v|
-        puts "error: #{k} => #{v}"
-      end
-    else
-      puts "added!"
+    params['port'] = 22 if params['port'].nil?
+    params['last_sync_timestamp'] = Time.at(0)
+    params['remote_folder'] = "synchzor/#{params['local_folder'].split("/").last}" if params['remote_folder'].nil?
+    connected = false
+    Net::SFTP.start(params['host'],params['username'], :password => params['password']) do |sftp|
+      connected = true
     end
+    if connected == false
+      puts "cannot connect using these settings"
+      exit
+    else
+      puts "ensuring #{params['remote_folder']} exists on #{params['host']}"
+      begin
+        Net::SFTP.start(params['host'],params['username'], :password => params['password']) do |sftp|
+          parts = params['remote_folder'].split("/")
+          composite = ""
+          parts.each do |part|
+            composite = composite + part + "/"
+            sftp.stat!(composite) do |response|
+              unless response.ok?
+                sftp.mkdir! composite
+              end
+            end
+          end
+          sftp.mkdir! params['remote_folder'] + "/.synchzor/"
+        end
+      rescue Net::SFTP::StatusException => e
+      end
+    end
+    new_entry = {}
+    new_entry["local_folder"] = params["local_folder"]
+    new_entry["username"] = params["username"]
+    new_entry["host"] = params["host"]
+    new_entry["password"] = params["password"]
+    new_entry["last_sync_timestamp"] = params["last_sync_timestamp"]
+    new_entry["remote_folder"] = params["remote_folder"]
+    @DB << new_entry
+    self.save_db
   end
 
   def self.remove
-    self.start_connection
+    self.load_db
     params = self.load_params
-    if params["local_folder"]
-      if SynchFolder.where(:local_folder => params["local_folder"]).count > 0
-        SynchFolder.where(:local_folder => params["local_folder"]).first.delete
-        puts "no longer synching #{params["local_folder"]}"
-      else
-        puts "local_folder is not being tracked. check with the show command"
-      end
-    else
+    if params["local_folder"].nil?
       puts "local_folder is required"
+      exit
+    end
+    found = false
+    new_db = []
+    @DB.each do |sf|
+      if sf['local_folder'] == params["local_folder"]
+        found = true
+        break
+      else
+        new_db << sf
+      end
+    end
+    if found
+      @DB = new_db
+      puts "no longer synching #{params["local_folder"]}"
+      self.save_db
+    else
+      puts "#{params["local_folder"]} is not being tracked. check with the show command"
     end
   end
 
@@ -288,18 +348,29 @@ class Synchzor < Object
   end
 
   def self.delete_db
-    DEFAULT_LOGGER.info "Starting Synchzor Reset"
-    self.start_connection
-    File.delete "#{RAILS_ROOT}/db/synchzor"
+    File.delete(DB_FILE) if File.file?(DB_FILE)
     DEFAULT_LOGGER.info "Old DB Deleted"
   end
 
-  def self.start_connection
-    db_config = YAML::load(File.open("#{RAILS_ROOT}/db/config.yml"))
-    ActiveRecord::Base.establish_connection(db_config['synchzor'])
+  private
+
+  def self.load_db
+    if File.file?(DB_FILE)
+      file = File.open(DB_FILE)
+      contents = file.read
+      @DB = JSON.parse(contents)
+    else
+      @DB = []
+    end
   end
 
-  private
+  def self.save_db
+    if @DB != []
+      File.open(DB_FILE, 'w') {|f| f.write(@DB.to_json) }
+    else
+      self.delete_db
+    end
+  end
 
   def self.sftp_file_exists(path, file, sftp)
     sftp.dir.glob(path, file) do |entry|
@@ -313,9 +384,7 @@ class Synchzor < Object
     ARGV.each do |arg|
       if arg.include?("=")
         parts = arg.split("=")
-        if SynchFolder.col_names_array.include?(parts[0])
-          params[parts[0]] = parts[1]
-        end
+        params[parts[0]] = parts[1]
       end
     end
     params

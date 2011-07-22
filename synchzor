@@ -1,5 +1,7 @@
-require 'rubygems'
-require "#{File.dirname(__FILE__)}/config/initializers/rails_env"
+#!/usr/bin/env ruby
+
+
+require "#{File.dirname(File.realpath(__FILE__))}/config/initializers/rails_env"
 %w(gems logging models).each do |initializer|
   require "#{RAILS_ROOT}/config/initializers/#{initializer}"
 end
@@ -12,10 +14,10 @@ class SynchzorInterface < Object
       "remove",
       "synch",
       "sync",
-      "setup",
       "reset",
       "remote_clean",
       "remote_reset",
+      "help"
   ]
 
   def self.init
@@ -78,17 +80,8 @@ remote_reset: removes all files from the remote server, and then pushes the loca
     self.synch
   end
 
-  def self.setup
-    Synchzor.start_connection
-    ActiveRecord::Base.connection.reconnect!
-    ActiveRecord::Migrator.migrate('db/migrate')
-  end
-
   def self.reset
-    Synchzor.start_connection
     Synchzor.delete_db
-    ActiveRecord::Base.connection.reconnect!
-    ActiveRecord::Migrator.migrate('db/migrate')
   end
 
   def self.remote_clean

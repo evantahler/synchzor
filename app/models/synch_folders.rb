@@ -1,6 +1,10 @@
 class SynchFolder < ActiveRecord::Base
   require 'net/sftp'
 
+  include ActiveModel::Validations
+  include ActiveModel::Conversion
+  extend ActiveModel::Naming
+
   validates_presence_of :local_folder
   #validates_presence_of :remote_folder
   validates_presence_of :username
