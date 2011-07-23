@@ -29,4 +29,7 @@ setup:
     5) create an alias to the synchzor executable in your ~/.bashrc file for easy access.  For example: alias synchzor='/Users/evantahler/.synchzor/synchzor'
     6) profit!
 
+If you want sychzor to constantly run (like DropBox), you might consider adding a crontab entry for synchzor [[ * * * * * ~/.synchzor/synchzor local_folder=Path/to/synch/folder ]]
+a log is kept in ~/.synchzor/log/
+
 see help.txt or run `synchzor help` for mor information
