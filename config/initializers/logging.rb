@@ -20,4 +20,3 @@ end
 
 logdir = "#{RAILS_ROOT}/log"
 DEFAULT_LOGGER = TeeLogger.new("#{logdir}/#{RAILS_ENV}.log", ActiveSupport::BufferedLogger::Severity::const_get(log_level.upcase))
-ActiveRecord::Base.logger = DEFAULT_LOGGER
