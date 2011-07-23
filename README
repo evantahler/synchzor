@@ -1,5 +1,7 @@
 SynchZor
 
+*** vist http://synchzor.com for more information ***
+
 SynchZor is a ruby project that aims to emulate DropBox-like functionality by synching files and folders across multiple computers. This tool is suited for making backups and for for sharing files and folders.
 
 Features:
