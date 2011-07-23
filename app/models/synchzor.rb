@@ -269,21 +269,29 @@ class Synchzor < Object
       exit
     else
       puts "ensuring #{params['remote_folder']} exists on #{params['host']}"
-      begin
-        Net::SFTP.start(params['host'],params['username'], :password => params['password']) do |sftp|
-          parts = params['remote_folder'].split("/")
-          composite = ""
-          parts.each do |part|
-            composite = composite + part + "/"
-            sftp.stat!(composite) do |response|
+
+      Net::SFTP.start(params['host'],params['username'], :password => params['password']) do |sftp|
+        parts = params['remote_folder'].split("/")
+        composite = ""
+        needed_remote_folders = []
+        parts.each do |part|
+          composite = composite + part + "/"
+          needed_remote_folders << composite.dup
+        end
+        needed_remote_folders.each do |folder|
+          begin
+            sftp.stat!(folder) do |response|
               unless response.ok?
-                sftp.mkdir! composite
+                sftp.mkdir! folder
               end
             end
+          rescue Net::SFTP::StatusException => e
           end
-          sftp.mkdir! params['remote_folder'] + "/.synchzor/"
         end
-      rescue Net::SFTP::StatusException => e
+        begin
+          sftp.mkdir! params['remote_folder'] + "/.synchzor/"
+        rescue Net::SFTP::StatusException => e
+        end
       end
     end
     new_entry = {}
