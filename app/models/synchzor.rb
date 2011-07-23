@@ -1,28 +1,14 @@
 class Synchzor < Object
+
   require 'net/sftp'
   require "digest"
 
   DB_FILE = "db/synchzor"
 
-  def self.synch(params = nil)
-
+  def self.synch
     self.load_db
     params = self.load_params
-    found = false
-    sf = {}
-    new_db = []
-    @DB.each do |sf_|
-      if params["local_folder"] == sf_["local_folder"]
-        found = true
-        sf = sf_.dup
-      else
-        new_db << sf_
-      end
-    end
-    unless found
-      puts "this local_folder is not found, and not not being synched"
-      exit
-    end
+    sf, new_db = self.load_and_check_local_folder(params)
 
     DEFAULT_LOGGER.info "Synching #{sf['local_folder']} to #{sf['remote_folder']} @ #{sf['host']}"
 
@@ -41,10 +27,10 @@ class Synchzor < Object
         exit
       end
 
-        # place lockfile on server
+      # place lockfile on server
       sftp.upload! lock_file, "#{sf['remote_folder']}/.synchzor/lock_file.lock"
 
-        # download the remote manifest and removed file list
+      # download the remote manifest and removed file list
       remote_manifest = []
       deleted_list = []
       if self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", "manifest.json", sftp)
@@ -55,7 +41,7 @@ class Synchzor < Object
         deleted_list = JSON.parse(File.read(remote_deleted_file))
       end
 
-        # delete local files which the server says to delete
+      # delete local files which the server says to delete
       DEFAULT_LOGGER.info " >>> deleting local files per server"
       deleted_list.each do |deleted_file|
         local_file = "#{sf['local_folder']}/#{deleted_file["local_path"]}"
@@ -72,7 +58,7 @@ class Synchzor < Object
         end
       end
 
-        # create hashes for local files, load updated_at timestamps from them
+      # create hashes for local files, load updated_at timestamps from them
       local_files = []
       Dir.glob( File.join(sf['local_folder'], '**', '*') ) { |file| local_files << file }
       files = []
@@ -100,7 +86,7 @@ class Synchzor < Object
         end
       end
 
-        # ensure all needed folders exist on the server
+      # ensure all needed folders exist on the server
       folders.each do |folder|
         begin
           sftp.mkdir! "#{sf['remote_folder']}/#{folder}/"
@@ -108,7 +94,7 @@ class Synchzor < Object
         end
       end
 
-        # compare local files to manifest (files are same, local_new, local_deleted, server_new, conflict)
+      # compare local files to manifest (files are same, local_new, local_deleted, server_new, conflict)
       files.each do |file|
         status = "local_new"
         remote_manifest.each do |m|
@@ -133,7 +119,7 @@ class Synchzor < Object
         file["status"] = status
       end
 
-        # update locally new files to server
+      # update locally new files to server
       DEFAULT_LOGGER.info " >>> Uploading locally newer files"
       files.each do |file|
         if file["status"] == "local_new"
@@ -144,7 +130,7 @@ class Synchzor < Object
         end
       end
 
-        # pull new files from server and add/overwrite and deal with locally deleted files
+      # pull new files from server and add/overwrite and deal with locally deleted files
       DEFAULT_LOGGER.info " >>> Downloading server newer files and noting local deletions"
       remote_manifest.each do |m|
         if m["needed?"] == true || m["needed?"].nil? #nil = a file the server has but it not local
@@ -180,7 +166,7 @@ class Synchzor < Object
         end
       end
 
-        # pull conflicting files from server and append .conflict to them
+      # pull conflicting files from server and append .conflict to them
       DEFAULT_LOGGER.info " >>> Downloading conflicting files (will have .conflict appended to the name)"
       files.each do |file|
         if file["status"] == "conflict"
@@ -191,7 +177,7 @@ class Synchzor < Object
         end
       end
 
-        # generate manifest and push to server
+      # generate manifest and push to server
       files.each do |file|
         file["status"] = nil
       end
@@ -201,7 +187,7 @@ class Synchzor < Object
       File.open(remote_deleted_file, 'w') {|f| f.write(deleted_list.to_json) }
       sftp.upload! remote_deleted_file, server_deleted_file
 
-        # remove lockfile on server
+      # remove lockfile on server
       sftp.remove! "#{sf['remote_folder']}/.synchzor/lock_file.lock"
     end
 
@@ -217,19 +203,7 @@ class Synchzor < Object
   def self.remote_clean
     self.load_db
     params = self.load_params
-    found = false
-    sf = {}
-    @DB.each do |sf_|
-      if params["local_folder"] == sf_["local_folder"]
-        found = true
-        sf = sf_.dup
-        break
-      end
-    end
-    unless found
-      puts "this local_folder is not found, and not not being synched"
-      exit
-    end
+    sf, new_db = self.load_and_check_local_folder(params)
 
     DEFAULT_LOGGER.info "removing all files and folders from #{sf['remote_folder']} @ #{sf['host']}"
     Net::SFTP.start(sf['host'],sf['username'], :password => sf['password']) do |sftp|
@@ -258,7 +232,7 @@ class Synchzor < Object
     end
   end
 
-  def self.show
+  def self.list
     self.load_db
     puts "folders being synched:"
     @DB.each do |folder|
@@ -269,6 +243,10 @@ class Synchzor < Object
   def self.add
     self.load_db
     params = self.load_params
+    if params["local_folder"].nil?
+      puts "local_folder not given, assuming you want to synch this folder '#{@@starting_dir}'"
+      params["local_folder"] = @@starting_dir
+    end
     ["local_folder","username","host","password"].each do |req|
       unless params.include?(req)
         puts "#{req} is required to create a new synch folder"
@@ -317,32 +295,16 @@ class Synchzor < Object
     new_entry["remote_folder"] = params["remote_folder"]
     @DB << new_entry
     self.save_db
+    puts "Added!"
   end
 
   def self.remove
     self.load_db
     params = self.load_params
-    if params["local_folder"].nil?
-      puts "local_folder is required"
-      exit
-    end
-    found = false
-    new_db = []
-    @DB.each do |sf|
-      if sf['local_folder'] == params["local_folder"]
-        found = true
-        break
-      else
-        new_db << sf
-      end
-    end
-    if found
-      @DB = new_db
-      puts "no longer synching #{params["local_folder"]}"
-      self.save_db
-    else
-      puts "#{params["local_folder"]} is not being tracked. check with the show command"
-    end
+    sf, new_db = self.load_and_check_local_folder(params)
+    @DB = new_db
+    puts "no longer synching #{params["local_folder"]}"
+    self.save_db
   end
 
   def self.create_remote_dir_from_file(remote_file, sftp)
@@ -361,7 +323,16 @@ class Synchzor < Object
     DEFAULT_LOGGER.info "Old DB Deleted"
   end
 
+
+
+
+
+
   private
+
+
+
+
 
   def self.load_db
     if File.file?(DB_FILE)
@@ -397,6 +368,36 @@ class Synchzor < Object
       end
     end
     params
+  end
+
+  def self.load_and_check_local_folder(params = nil)
+    params = self.load_params if params.nil?
+    found = false
+    sf = {}
+    new_db = []
+
+    if params["local_folder"].nil?
+      params["local_folder"] = @@starting_dir
+    end
+
+    if params["local_folder"].nil?
+      puts "local_folder is required"
+      exit
+    end
+
+    @DB.each do |sf_|
+      if params["local_folder"] == sf_["local_folder"]
+        found = true
+        sf = sf_.dup
+      else
+        new_db << sf_
+      end
+    end
+    unless found
+      puts "this local_folder '#{params["local_folder"]}' is not setup to be synched"
+      exit
+    end
+    [sf, new_db]
   end
 
 end

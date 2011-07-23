@@ -1,15 +1,17 @@
 #!/usr/bin/env ruby
 
-
+@@starting_dir = Dir.pwd
 require "#{File.dirname(File.realpath(__FILE__))}/config/initializers/rails_env"
 %w(gems logging models).each do |initializer|
   require "#{RAILS_ROOT}/config/initializers/#{initializer}"
 end
 
+################################################
+
 class SynchzorInterface < Object
 
   INTERFACE_COMMANDS = [
-      "show",
+      "list",
       "add",
       "remove",
       "synch",
@@ -32,36 +34,13 @@ class SynchzorInterface < Object
   end
 
   def self.help
-    puts <<-eos
-
-Synchzor Help:
-
-Commands:
-  show
-  add
-  remove
-  synch
-  sync
-  setup
-  reset
-  remote_clean
-  remote_reset
-
-show: list the folder monitored on this machine and their settings
-add: add a new local folder to synch
-remove: stop synching a local folder.  Content will be maintained.
-synch: sync the local folder to the remote server
-sync: alias for synch for you spelling purists
-setup: create the local DB for storing settings (required)
-reset: reset all local settings, forget all synched folders.  content will be maintained.
-remote_clean: remove all files and records from the server for this synched folder
-remote_reset: removes all files from the remote server, and then pushes the local copy {remote_clean + synch}
-
-    eos
+    file = File.open("#{RAILS_ROOT}/help.txt", "rb")
+    contents = file.read
+    puts contents
   end
 
-  def self.show
-    Synchzor.show
+  def self.list
+    Synchzor.list
   end
 
   def self.add
