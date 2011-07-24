@@ -16,6 +16,7 @@ class SynchzorInterface < Object
       "remove",
       "synch",
       "sync",
+      "all",
       "reset",
       "remote_clean",
       "remote_reset",
@@ -57,6 +58,10 @@ class SynchzorInterface < Object
 
   def self.sync
     self.synch
+  end
+
+  def self.all
+    Synchzor.all
   end
 
   def self.reset

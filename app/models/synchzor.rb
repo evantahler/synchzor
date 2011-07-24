@@ -5,9 +5,9 @@ class Synchzor < Object
 
   DB_FILE = "db/synchzor"
 
-  def self.synch
+  def self.synch(params)
     self.load_db
-    params = self.load_params
+    params = self.load_params if params.nil?
     sf, new_db = self.load_and_check_local_folder(params)
 
     DEFAULT_LOGGER.info "Synching #{sf['local_folder']} to #{sf['remote_folder']} @ #{sf['host']}"
@@ -311,7 +311,7 @@ class Synchzor < Object
     params = self.load_params
     sf, new_db = self.load_and_check_local_folder(params)
     @DB = new_db
-    puts "no longer synching #{params["local_folder"]}"
+    DEFAULT_LOGGER.info "no longer synching #{params["local_folder"]}"
     self.save_db
   end
 
@@ -331,7 +331,15 @@ class Synchzor < Object
     DEFAULT_LOGGER.info "Old DB Deleted"
   end
 
-
+  def self.all
+    DEFAULT_LOGGER.info "synching all known folders"
+    DEFAULT_LOGGER.info ""
+    self.load_db
+    @DB.each do |f|
+      self.synch(f)
+    end
+    DEFAULT_LOGGER.info "all complete"
+  end
 
 
 

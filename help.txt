@@ -6,6 +6,7 @@ Commands:
   remove
   synch
   sync
+  all
   reset
   remote_clean
   remote_reset
@@ -25,6 +26,9 @@ synch: sync the local folder to the remote server
 
 sync: alias for synch for you spelling purists
     inputs: (optional)local_folder=Path/To/Folder/
+
+all: will synch local folders.  This might be good to run on a schedule
+    inputs: none
 
 reset: reset all local settings, forget all synched folders.  local and remote content will be maintained.
     inputs: none
