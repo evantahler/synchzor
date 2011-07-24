@@ -36,6 +36,6 @@ a log is kept in ~/.synchzor/log/
 
 see help.txt or run `synchzor help` for mor information
 
-Next Steps:
+next features:
 - Don't store server passwords in plain text on the local machine
 - Currently the sync process works over the whole folder at once (and blocks other folks from synching until complete).  Moving this to per-file lock and sync is a good idea.
