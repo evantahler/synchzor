@@ -5,7 +5,7 @@ class Synchzor < Object
 
   DB_FILE = "db/synchzor"
 
-  def self.synch(params)
+  def self.synch(params = nil)
     self.load_db
     params = self.load_params if params.nil?
     sf, new_db = self.load_and_check_local_folder(params)
