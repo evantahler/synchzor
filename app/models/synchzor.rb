@@ -42,7 +42,7 @@ class Synchzor < Object
             local_delete_dir = File.dirname(local_file)
             DEFAULT_LOGGER.info "removing #{local_file}"
             File.delete(local_file)
-            if Dir["#{local_delete_dir}/*"].count == 0
+            if Dir["#{local_delete_dir}/*"].count == 0 && sf['local_folder'] != local_delete_dir
               DEFAULT_LOGGER.info "removing #{local_delete_dir} as it is now empty"
               Dir.delete(local_delete_dir)
             end
@@ -141,15 +141,20 @@ class Synchzor < Object
                   Dir::mkdir(folder_needed) if !File.directory?(folder_needed) && part != parts[-1]
                 end
               end
-              sftp.download! remote, local
-              files << {
-                  "full_path" => local,
-                  "local_path" => m["local_path"],
-                  "md5" => Digest::MD5.hexdigest(File.read(local)),
-                  "update_time" => File.mtime(local),
-                  "access_time" => m["access_time"],
-                  "status" => nil
-              }
+              unless self.is_remote_file_locked?(sf, m["local_path"], sftp)
+                sftp.download! remote, local
+                files << {
+                    "full_path" => local,
+                    "local_path" => m["local_path"],
+                    "md5" => Digest::MD5.hexdigest(File.read(local)),
+                    "update_time" => File.mtime(local),
+                    "access_time" => m["access_time"],
+                    "status" => nil
+                }
+              else
+                puts "someone else is modifying this file, exiting"
+                exit
+              end
             else
               DEFAULT_LOGGER.info "removing #{remote} from server"
               sftp.remove! remote
@@ -361,9 +366,8 @@ class Synchzor < Object
   def self.create_remote_file_lock(sf, local_path, sftp)
     full_remote_path = sf['remote_folder'] + '/' + local_path
     hash = Digest::MD5.hexdigest(full_remote_path)
-    hash_file = "#{hash}.lock"
     lock_file = "#{sf['remote_folder']}/.synchzor/#{hash}.lock"
-    if self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", hash_file, sftp)
+    if self.is_remote_file_locked?(sf, local_path, sftp)
       DEFAULT_LOGGER.info "the file #{local_path} is being modified by someone else. exiting"
       exit
     end
@@ -375,13 +379,20 @@ class Synchzor < Object
   def self.remove_remote_file_lock(sf, local_path, sftp)
     full_remote_path = sf['remote_folder'] + '/' + local_path
     hash = Digest::MD5.hexdigest(full_remote_path)
-    hash_file = "#{hash}.lock"
     lock_file = "#{sf['remote_folder']}/.synchzor/#{hash}.lock"
-    unless self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", hash_file, sftp)
+    unless self.is_remote_file_locked?(sf, local_path, sftp)
       DEFAULT_LOGGER.info "the file #{local_path} is not locked by you. exiting"
       exit
     end
     sftp.remove! lock_file
+  end
+
+  def self.is_remote_file_locked?(sf, local_path, sftp)
+    full_remote_path = sf['remote_folder'] + '/' + local_path
+    hash = Digest::MD5.hexdigest(full_remote_path)
+    hash_file = "#{hash}.lock"
+    return true if self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", hash_file, sftp)
+    false
   end
 
   def self.create_remote_dir_from_file(remote_file, sftp)
