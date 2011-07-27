@@ -141,7 +141,13 @@ class Synchzor < Object
                   Dir::mkdir(folder_needed) if !File.directory?(folder_needed) && part != parts[-1]
                 end
               end
-              unless self.is_remote_file_locked?(sf, m["local_path"], sftp)
+              if self.is_remote_file_locked?(sf, m["local_path"], sftp)
+                puts "someone else is modifying this file, exiting"
+                exit
+              end
+              unless self.sftp_file_exists(sf['remote_folder'], m["local_path"], sftp)
+                puts "file is missing from server, skipping"
+              else
                 sftp.download! remote, local
                 files << {
                     "full_path" => local,
@@ -151,13 +157,10 @@ class Synchzor < Object
                     "access_time" => m["access_time"],
                     "status" => nil
                 }
-              else
-                puts "someone else is modifying this file, exiting"
-                exit
               end
             else
               DEFAULT_LOGGER.info "removing #{remote} from server"
-              sftp.remove! remote
+              sftp.remove! remote if self.sftp_file_exists(sf['remote_folder'], m["local_path"], sftp)
               deleted_list << {
                   "local_path" => m["local_path"],
                   "timestamp" => Time.now
