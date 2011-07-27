@@ -1,7 +1,7 @@
 class Synchzor < Object
 
   require 'net/sftp'
-  require "digest"
+  require 'digest'
 
   DB_FILE = "db/synchzor"
 
@@ -22,14 +22,6 @@ class Synchzor < Object
     File.open(lock_file, 'w') {|f| f.write("I am a lock file from Synchzor") }
     begin
       Net::SFTP.start(sf['host'],sf['username'], :password => sf['password']) do |sftp|
-        #check if there is a lock file on the server; exit if so
-        if self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", "lock_file.lock", sftp)
-          DEFAULT_LOGGER.info "remote directory is locked (probably someone else is synching). exiting"
-          exit
-        end
-
-        # place lockfile on server
-        sftp.upload! lock_file, "#{sf['remote_folder']}/.synchzor/lock_file.lock"
 
         # download the remote manifest and removed file list
         remote_manifest = []
@@ -127,7 +119,9 @@ class Synchzor < Object
             local = file["full_path"]
             remote = "#{sf['remote_folder']}/#{file["local_path"]}"
             DEFAULT_LOGGER.info "uploading #{local} to #{remote}"
+            self.create_remote_file_lock(sf, file["local_path"], sftp)
             sftp.upload! local, remote
+            self.remove_remote_file_lock(sf, file["local_path"], sftp)
           end
         end
 
@@ -187,9 +181,6 @@ class Synchzor < Object
 
         File.open(remote_deleted_file, 'w') {|f| f.write(deleted_list.to_json) }
         sftp.upload! remote_deleted_file, server_deleted_file
-
-        # remove lockfile on server
-        sftp.remove! "#{sf['remote_folder']}/.synchzor/lock_file.lock"
       end
     rescue Net::SSH::AuthenticationFailed => e
       puts "Cannot connect using these credentials"
@@ -339,17 +330,6 @@ class Synchzor < Object
     self.save_db
   end
 
-  def self.create_remote_dir_from_file(remote_file, sftp)
-    parts = remote_file.split("/")
-    parts.pop
-    remote_path = parts.join("/")
-    begin
-      sftp.mkdir! remote_path
-    rescue Net::SFTP::StatusException => e
-      puts "remote folder #{remote_path} exists already"
-    end
-  end
-
   def self.delete_db
     File.delete(DB_FILE) if File.file?(DB_FILE)
     DEFAULT_LOGGER.info "Old DB Deleted"
@@ -368,11 +348,52 @@ class Synchzor < Object
 
 
 
+
+
+
   private
 
 
 
 
+
+
+  def self.create_remote_file_lock(sf, local_path, sftp)
+    full_remote_path = sf['remote_folder'] + '/' + local_path
+    hash = Digest::MD5.hexdigest(full_remote_path)
+    hash_file = "#{hash}.lock"
+    lock_file = "#{sf['remote_folder']}/.synchzor/#{hash}.lock"
+    if self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", hash_file, sftp)
+      DEFAULT_LOGGER.info "the file #{local_path} is being modified by someone else. exiting"
+      exit
+    end
+    sftp.file.open(lock_file, "w") do |f|
+      f.puts "lock"
+    end
+  end
+
+  def self.remove_remote_file_lock(sf, local_path, sftp)
+    full_remote_path = sf['remote_folder'] + '/' + local_path
+    hash = Digest::MD5.hexdigest(full_remote_path)
+    hash_file = "#{hash}.lock"
+    lock_file = "#{sf['remote_folder']}/.synchzor/#{hash}.lock"
+    unless self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", hash_file, sftp)
+      DEFAULT_LOGGER.info "the file #{local_path} is not locked by you. exiting"
+      exit
+    end
+    sftp.remove! lock_file
+  end
+
+  def self.create_remote_dir_from_file(remote_file, sftp)
+    parts = remote_file.split("/")
+    parts.pop
+    remote_path = parts.join("/")
+    begin
+      sftp.mkdir! remote_path
+    rescue Net::SFTP::StatusException => e
+      puts "remote folder #{remote_path} exists already"
+    end
+  end
 
   def self.load_db
     if File.file?(DB_FILE)
