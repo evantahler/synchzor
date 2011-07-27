@@ -20,175 +20,183 @@ class Synchzor < Object
     server_deleted_file = "#{sf['remote_folder']}/.synchzor/removed_files.json"
 
     File.open(lock_file, 'w') {|f| f.write("I am a lock file from Synchzor") }
-    Net::SFTP.start(sf['host'],sf['username'], :password => sf['password']) do |sftp|
-      #check if there is a lock file on the server; exit if so
-      if self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", "lock_file.lock", sftp)
-        DEFAULT_LOGGER.info "remote directory is locked (probably someone else is synching). exiting"
-        exit
-      end
-
-      # place lockfile on server
-      sftp.upload! lock_file, "#{sf['remote_folder']}/.synchzor/lock_file.lock"
-
-      # download the remote manifest and removed file list
-      remote_manifest = []
-      deleted_list = []
-      if self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", "manifest.json", sftp)
-        DEFAULT_LOGGER.info " >>> copying remote manifests"
-        sftp.download! server_manifest_file, remote_manifest_file
-        sftp.download! server_deleted_file, remote_deleted_file
-        remote_manifest = JSON.parse(File.read(remote_manifest_file))
-        deleted_list = JSON.parse(File.read(remote_deleted_file))
-      end
-
-      # delete local files which the server says to delete
-      DEFAULT_LOGGER.info " >>> deleting local files per server"
-      deleted_list.each do |deleted_file|
-        local_file = "#{sf['local_folder']}/#{deleted_file["local_path"]}"
-        if File.file?(local_file) && File.atime(local_file) <= sf['last_sync_timestamp'].to_datetime
-          local_delete_dir = File.dirname(local_file)
-          DEFAULT_LOGGER.info "removing #{local_file}"
-          File.delete(local_file)
-          if Dir["#{local_delete_dir}/*"].count == 0
-            DEFAULT_LOGGER.info "removing #{local_delete_dir} as it is now empty"
-            Dir.delete(local_delete_dir)
-          end
-        elsif File.file?(local_file) && File.atime(local_file) > sf['last_sync_timestamp'].to_datetime
-          deleted_list.delete_if {|hash| hash["local_path"] == deleted_file["local_path"] }
+    begin
+      Net::SFTP.start(sf['host'],sf['username'], :password => sf['password']) do |sftp|
+        #check if there is a lock file on the server; exit if so
+        if self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", "lock_file.lock", sftp)
+          DEFAULT_LOGGER.info "remote directory is locked (probably someone else is synching). exiting"
+          exit
         end
-      end
 
-      # create hashes for local files, load updated_at timestamps from them
-      local_files = []
-      Dir.glob( File.join(sf['local_folder'], '**', '*') ) { |file| local_files << file }
-      files = []
-      folders = []
-      local_files.each do |f|
-        if !f.include?(".conflict") && !File.directory?(f)
-          l = f.dup
-          l.sub!(sf['local_folder'] + "/","")
-          l.sub!(sf['local_folder'],"")
-          files << {
-              "full_path" => f,
-              "local_path" => l,
-              "md5" => Digest::MD5.hexdigest(File.read(f)),
-              "update_time" => File.mtime(f),
-              "access_time" => File.atime(f),
-              "status" => nil
-          }
+        # place lockfile on server
+        sftp.upload! lock_file, "#{sf['remote_folder']}/.synchzor/lock_file.lock"
 
+        # download the remote manifest and removed file list
+        remote_manifest = []
+        deleted_list = []
+        if self.sftp_file_exists("#{sf['remote_folder']}/.synchzor/", "manifest.json", sftp)
+          DEFAULT_LOGGER.info " >>> copying remote manifests"
+          sftp.download! server_manifest_file, remote_manifest_file
+          sftp.download! server_deleted_file, remote_deleted_file
+          remote_manifest = JSON.parse(File.read(remote_manifest_file))
+          deleted_list = JSON.parse(File.read(remote_deleted_file))
         end
-        if File.directory?(f)
-          l = f.dup
-          l.sub!(sf['local_folder'] + "/","")
-          l.sub!(sf['local_folder'],"")
-          folders << l
-        end
-      end
 
-      # ensure all needed folders exist on the server
-      folders.each do |folder|
-        begin
-          sftp.mkdir! "#{sf['remote_folder']}/#{folder}/"
-        rescue Net::SFTP::StatusException => e
-        end
-      end
-
-      # compare local files to manifest (files are same, local_new, local_deleted, server_new, conflict)
-      files.each do |file|
-        status = "local_new"
-        remote_manifest.each do |m|
-          if m["needed?"].nil? && m["local_path"] == file["local_path"]
-            if m["md5"] == file["md5"]
-              status = "same"
-              m["needed?"] = false
-              break
-            elsif m["md5"] != file["md5"]
-              if file["update_time"] > m["update_time"].to_datetime
-                status = "server_new"
-                m["needed?"] = true
-              end
-              if file["update_time"] <= m["update_time"].to_datetime
-                status = "conflict"
-                m["needed?"] = true
-              end
-              break
+        # delete local files which the server says to delete
+        DEFAULT_LOGGER.info " >>> deleting local files per server"
+        deleted_list.each do |deleted_file|
+          local_file = "#{sf['local_folder']}/#{deleted_file["local_path"]}"
+          if File.file?(local_file) && File.atime(local_file) <= sf['last_sync_timestamp'].to_datetime
+            local_delete_dir = File.dirname(local_file)
+            DEFAULT_LOGGER.info "removing #{local_file}"
+            File.delete(local_file)
+            if Dir["#{local_delete_dir}/*"].count == 0
+              DEFAULT_LOGGER.info "removing #{local_delete_dir} as it is now empty"
+              Dir.delete(local_delete_dir)
             end
+          elsif File.file?(local_file) && File.atime(local_file) > sf['last_sync_timestamp'].to_datetime
+            deleted_list.delete_if {|hash| hash["local_path"] == deleted_file["local_path"] }
           end
         end
-        file["status"] = status
-      end
 
-      # update locally new files to server
-      DEFAULT_LOGGER.info " >>> Uploading locally newer files"
-      files.each do |file|
-        if file["status"] == "local_new"
-          local = file["full_path"]
-          remote = "#{sf['remote_folder']}/#{file["local_path"]}"
-          DEFAULT_LOGGER.info "uploading #{local} to #{remote}"
-          sftp.upload! local, remote
-        end
-      end
-
-      # pull new files from server and add/overwrite and deal with locally deleted files
-      DEFAULT_LOGGER.info " >>> Downloading server newer files and noting local deletions"
-      remote_manifest.each do |m|
-        if m["needed?"] == true || m["needed?"].nil? #nil = a file the server has but it not local
-          remote = "#{sf['remote_folder']}/#{m["local_path"]}"
-          local = "#{sf['local_folder']}/#{m["local_path"]}"
-          if m["access_time"].to_datetime > sf['last_sync_timestamp']
-            DEFAULT_LOGGER.info "downloading #{remote} to #{local}"
-            parts = m["local_path"].split("/")
-            if parts.count > 1
-              folder_needed = sf['local_folder']
-              parts.each do |part|
-                folder_needed = "#{folder_needed}/#{part}"
-                Dir::mkdir(folder_needed) if !File.directory?(folder_needed) && part != parts[-1]
-              end
-            end
-            sftp.download! remote, local
+        # create hashes for local files, load updated_at timestamps from them
+        local_files = []
+        Dir.glob( File.join(sf['local_folder'], '**', '*') ) { |file| local_files << file }
+        files = []
+        folders = []
+        local_files.each do |f|
+          if !f.include?(".conflict") && !File.directory?(f)
+            l = f.dup
+            l.sub!(sf['local_folder'] + "/","")
+            l.sub!(sf['local_folder'],"")
             files << {
-                "full_path" => local,
-                "local_path" => m["local_path"],
-                "md5" => Digest::MD5.hexdigest(File.read(local)),
-                "update_time" => File.mtime(local),
-                "access_time" => m["access_time"],
+                "full_path" => f,
+                "local_path" => l,
+                "md5" => Digest::MD5.hexdigest(File.read(f)),
+                "update_time" => File.mtime(f),
+                "access_time" => File.atime(f),
                 "status" => nil
             }
-          else
-            DEFAULT_LOGGER.info "removing #{remote} from server"
-            sftp.remove! remote
-            deleted_list << {
-                "local_path" => m["local_path"],
-                "timestamp" => Time.now
-            }
+
+          end
+          if File.directory?(f)
+            l = f.dup
+            l.sub!(sf['local_folder'] + "/","")
+            l.sub!(sf['local_folder'],"")
+            folders << l
           end
         end
-      end
 
-      # pull conflicting files from server and append .conflict to them
-      DEFAULT_LOGGER.info " >>> Downloading conflicting files (will have .conflict appended to the name)"
-      files.each do |file|
-        if file["status"] == "conflict"
-          local = file["full_path"] + ".conflict"
-          remote = "#{sf['remote_folder']}/#{file["local_path"]}"
-          DEFAULT_LOGGER.info "downloading #{local} to #{remote}"
-          sftp.download! remote, local
+        # ensure all needed folders exist on the server
+        folders.each do |folder|
+          begin
+            sftp.mkdir! "#{sf['remote_folder']}/#{folder}/"
+          rescue Net::SFTP::StatusException => e
+          end
         end
+
+        # compare local files to manifest (files are same, local_new, local_deleted, server_new, conflict)
+        files.each do |file|
+          status = "local_new"
+          remote_manifest.each do |m|
+            if m["needed?"].nil? && m["local_path"] == file["local_path"]
+              if m["md5"] == file["md5"]
+                status = "same"
+                m["needed?"] = false
+                break
+              elsif m["md5"] != file["md5"]
+                if file["update_time"] > m["update_time"].to_datetime
+                  status = "server_new"
+                  m["needed?"] = true
+                end
+                if file["update_time"] <= m["update_time"].to_datetime
+                  status = "conflict"
+                  m["needed?"] = true
+                end
+                break
+              end
+            end
+          end
+          file["status"] = status
+        end
+
+        # update locally new files to server
+        DEFAULT_LOGGER.info " >>> Uploading locally newer files"
+        files.each do |file|
+          if file["status"] == "local_new"
+            local = file["full_path"]
+            remote = "#{sf['remote_folder']}/#{file["local_path"]}"
+            DEFAULT_LOGGER.info "uploading #{local} to #{remote}"
+            sftp.upload! local, remote
+          end
+        end
+
+        # pull new files from server and add/overwrite and deal with locally deleted files
+        DEFAULT_LOGGER.info " >>> Downloading server newer files and noting local deletions"
+        remote_manifest.each do |m|
+          if m["needed?"] == true || m["needed?"].nil? #nil = a file the server has but it not local
+            remote = "#{sf['remote_folder']}/#{m["local_path"]}"
+            local = "#{sf['local_folder']}/#{m["local_path"]}"
+            if m["access_time"].to_datetime > sf['last_sync_timestamp']
+              DEFAULT_LOGGER.info "downloading #{remote} to #{local}"
+              parts = m["local_path"].split("/")
+              if parts.count > 1
+                folder_needed = sf['local_folder']
+                parts.each do |part|
+                  folder_needed = "#{folder_needed}/#{part}"
+                  Dir::mkdir(folder_needed) if !File.directory?(folder_needed) && part != parts[-1]
+                end
+              end
+              sftp.download! remote, local
+              files << {
+                  "full_path" => local,
+                  "local_path" => m["local_path"],
+                  "md5" => Digest::MD5.hexdigest(File.read(local)),
+                  "update_time" => File.mtime(local),
+                  "access_time" => m["access_time"],
+                  "status" => nil
+              }
+            else
+              DEFAULT_LOGGER.info "removing #{remote} from server"
+              sftp.remove! remote
+              deleted_list << {
+                  "local_path" => m["local_path"],
+                  "timestamp" => Time.now
+              }
+            end
+          end
+        end
+
+        # pull conflicting files from server and append .conflict to them
+        DEFAULT_LOGGER.info " >>> Downloading conflicting files (will have .conflict appended to the name)"
+        files.each do |file|
+          if file["status"] == "conflict"
+            local = file["full_path"] + ".conflict"
+            remote = "#{sf['remote_folder']}/#{file["local_path"]}"
+            DEFAULT_LOGGER.info "downloading #{local} to #{remote}"
+            sftp.download! remote, local
+          end
+        end
+
+        # generate manifest and push to server
+        files.each do |file|
+          file["status"] = nil
+        end
+        File.open(local_manifest_file, 'w') {|f| f.write(files.to_json) }
+        sftp.upload! local_manifest_file, server_manifest_file
+
+        File.open(remote_deleted_file, 'w') {|f| f.write(deleted_list.to_json) }
+        sftp.upload! remote_deleted_file, server_deleted_file
+
+        # remove lockfile on server
+        sftp.remove! "#{sf['remote_folder']}/.synchzor/lock_file.lock"
       end
-
-      # generate manifest and push to server
-      files.each do |file|
-        file["status"] = nil
-      end
-      File.open(local_manifest_file, 'w') {|f| f.write(files.to_json) }
-      sftp.upload! local_manifest_file, server_manifest_file
-
-      File.open(remote_deleted_file, 'w') {|f| f.write(deleted_list.to_json) }
-      sftp.upload! remote_deleted_file, server_deleted_file
-
-      # remove lockfile on server
-      sftp.remove! "#{sf['remote_folder']}/.synchzor/lock_file.lock"
+    rescue Net::SSH::AuthenticationFailed => e
+      puts "Cannot connect using these credentials"
+      exit
+    rescue SocketError
+      puts "Cannot connect to this host: #{sf['host']}"
+      exit
     end
 
     sf['last_sync_timestamp'] = Time.now
@@ -206,29 +214,37 @@ class Synchzor < Object
     sf, new_db = self.load_and_check_local_folder(params)
 
     DEFAULT_LOGGER.info "removing all files and folders from #{sf['remote_folder']} @ #{sf['host']}"
-    Net::SFTP.start(sf['host'],sf['username'], :password => sf['password']) do |sftp|
-      remote_files = []
-      sftp.dir.glob(sf['remote_folder'], "**/*") { |f| remote_files << f }
-      remote_files.each do |f|
-        if f.file?
-          DEFAULT_LOGGER.info "removing #{f.name} from the server (file)"
-          sftp.remove! "#{sf['remote_folder']}/#{f.name}"
+    begin
+      Net::SFTP.start(sf['host'],sf['username'], :password => sf['password']) do |sftp|
+        remote_files = []
+        sftp.dir.glob(sf['remote_folder'], "**/*") { |f| remote_files << f }
+        remote_files.each do |f|
+          if f.file?
+            DEFAULT_LOGGER.info "removing #{f.name} from the server (file)"
+            sftp.remove! "#{sf['remote_folder']}/#{f.name}"
+          end
+        end
+        remote_folders = []
+        sftp.dir.glob(sf['remote_folder'], "**/*") { |f| remote_folders << f }
+        remote_folders = remote_folders.sort_by {|x| -x.name.length}
+        remote_folders.each do |f|
+          if f.directory?
+            DEFAULT_LOGGER.info "removing #{f.name} from the server (dir)"
+            sftp.rmdir! "#{sf['remote_folder']}/#{f.name}/"
+          end
+        end
+        manifest = "#{sf['remote_folder']}/.synchzor/manifest.json"
+        begin
+          sftp.remove! manifest
+        rescue
         end
       end
-      remote_folders = []
-      sftp.dir.glob(sf['remote_folder'], "**/*") { |f| remote_folders << f }
-      remote_folders = remote_folders.sort_by {|x| -x.name.length}
-      remote_folders.each do |f|
-        if f.directory?
-          DEFAULT_LOGGER.info "removing #{f.name} from the server (dir)"
-          sftp.rmdir! "#{sf['remote_folder']}/#{f.name}/"
-        end
-      end
-      manifest = "#{sf['remote_folder']}/.synchzor/manifest.json"
-      begin
-        sftp.remove! manifest
-      rescue
-      end
+    rescue Net::SSH::AuthenticationFailed => e
+      puts "Cannot connect using these credentials"
+      exit
+    rescue SocketError
+      puts "Cannot connect to this host: #{sf['host']}"
+      exit
     end
   end
 
@@ -270,28 +286,36 @@ class Synchzor < Object
     else
       puts "ensuring #{params['remote_folder']} exists on #{params['host']}"
 
-      Net::SFTP.start(params['host'],params['username'], :password => params['password']) do |sftp|
-        parts = params['remote_folder'].split("/")
-        composite = ""
-        needed_remote_folders = []
-        parts.each do |part|
-          composite = composite + part + "/"
-          needed_remote_folders << composite.dup
-        end
-        needed_remote_folders.each do |folder|
-          begin
-            sftp.stat!(folder) do |response|
-              unless response.ok?
-                sftp.mkdir! folder
+      begin
+        Net::SFTP.start(params['host'],params['username'], :password => params['password']) do |sftp|
+          parts = params['remote_folder'].split("/")
+          composite = ""
+          needed_remote_folders = []
+          parts.each do |part|
+            composite = composite + part + "/"
+            needed_remote_folders << composite.dup
+          end
+          needed_remote_folders.each do |folder|
+            begin
+              sftp.stat!(folder) do |response|
+                unless response.ok?
+                  sftp.mkdir! folder
+                end
               end
+            rescue Net::SFTP::StatusException => e
             end
+          end
+          begin
+            sftp.mkdir! params['remote_folder'] + "/.synchzor/"
           rescue Net::SFTP::StatusException => e
           end
         end
-        begin
-          sftp.mkdir! params['remote_folder'] + "/.synchzor/"
-        rescue Net::SFTP::StatusException => e
-        end
+      rescue Net::SSH::AuthenticationFailed => e
+        puts "Cannot connect using these credentials"
+        exit
+      rescue SocketError
+        puts "Cannot connect to this host: #{sf['host']}"
+        exit
       end
     end
     new_entry = {}
