@@ -19,6 +19,11 @@ class Synchzor < Object
     remote_deleted_file = "#{RAILS_ROOT}/tmp/removed_files.json"
     server_deleted_file = "#{sf['remote_folder']}/.synchzor/removed_files.json"
 
+    unless File.directory? sf['local_folder']
+      DEFAULT_LOGGER.info "#{sf['local_folder']} is not a directory.  Skipping."
+      return
+    end
+
     File.open(lock_file, 'w') {|f| f.write("I am a lock file from Synchzor") }
     begin
       Net::SFTP.start(sf['host'],sf['username'], :password => sf['password']) do |sftp|
