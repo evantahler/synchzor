@@ -34,6 +34,8 @@ setup:
 If you want sychzor to constantly run (like DropBox), you might consider adding a crontab entry for synchzor [[ * * * * * ~/.synchzor/synchzor local_folder=Path/to/synch/folder ]]
 a log is kept in ~/.synchzor/log/
 
+You can also run the `synchzor all` command to synch all folders synchzor is tracking 
+
 see help.txt or run `synchzor help` for more information
 
 next features:
