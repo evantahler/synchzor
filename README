@@ -12,7 +12,7 @@ Features:
 - uses unix user management on server
 - favors updates, is safe about deletes
 - uploaded files are not versioned (to save time and space)
-- no metadata files or folders created in your project (data stored in sqlite database on your machine)
+- no metadata files or folders created in your project (data stored on the server in JSON)
 - files stored on server in accessible manner with folder hierarchy maintained
 - does not require a running dameon
 - logged
