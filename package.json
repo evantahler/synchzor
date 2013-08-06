@@ -1,0 +1,20 @@
+{
+  "author": "Evan Tahler <evantahler@gmail.com>",
+  "name": "synchzor",
+  "description": "file sync(h) and sharing for nerds",
+  "version": "0.0.1",
+  "homepage": "http://synchzor.com",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/evantahler/synchzor.git"
+  },
+  "main": "synchzor.js",
+  "keywords": [],
+  "engines": {
+    "node": ">=0.8.0"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "bin": {},
+  "scripts": {},
+}
