@@ -1,0 +1,8 @@
+pids/*
+tmp/*
+log/*
+cache/*
+node_modules/*
+.DS_Store
+npm-debug.log
+.tddium*
