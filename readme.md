@@ -2,7 +2,7 @@
 
 ```
 docker run -it --rm \
-  # -p 8000:8000 \
+  # -p 8080:8080 \
   # -p 55555:55555 \
   --name='synchzor_docker' \
   --env AWSACCESSKEYID=XXX \

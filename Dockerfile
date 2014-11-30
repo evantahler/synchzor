@@ -30,10 +30,6 @@ RUN apt-get -y install \
   nodejs \
   npm
 
-# LINK NODE
-RUN ln -s /usr/bin/nodejs /usr/bin/node
-RUN /usr/bin/npm install bittorrent-sync
-
 # BUILD FUSE-S3
 RUN mkdir /tmp/fuse
 RUN git clone https://github.com/s3fs-fuse/s3fs-fuse /tmp/fuse
@@ -49,9 +45,18 @@ RUN cd /usr/bin && tar -xzvf btsync.tar.gz && rm btsync.tar.gz
 ADD ./config/btsync.conf /btsync/btsync.conf
 RUN mkdir -p /tmp/btsync
 
+# LINK NODE
+RUN ln -s /usr/bin/nodejs /usr/bin/node
+
+# INSTALL NODE PACKAGES
+RUN mkdir /root/app
+ADD ./app/app.js /root/app/app.js
+ADD ./app/package.json /root/app/package.json
+RUN cd /root/app && npm install
+
 # OPEN PORTS
 EXPOSE 55555
-EXPOSE 8000
+EXPOSE 8080
 
 # SET UP SUPERVISOR
 ADD ./config/boot.sh /boot.sh

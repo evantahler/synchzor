@@ -10,5 +10,8 @@ sed -i -e "s/XX_DIR_XX/\/s3bucket\/synchzor\/$SYNCHZOR_USER\/$SYNCHZOR_FOLDER/g"
 # let it connect...
 sleep 5
 
+# turn on the monitoring server
+cd /root/app && ./node_modules/.bin/forever start app.js
+
 # turn on btsync
 /usr/bin/btsync --config /btsync/btsync.conf --nodaemon
