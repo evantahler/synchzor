@@ -1,33 +1,16 @@
-# SYNCHZOR
-*file sync(h) and sharing for nerds*
+## Docker notes
 
-It's like drop-box from the command line.   Sort-of.
-
-## Commands
-
-### `synchzor init`
-Creates the `.synchzor` file in the directory.  This contains the host, bucket, path, and credentials for this directory.  
-
-### `synchzor sync`
-The main command.  Push and Pull files from the server
-
-### `synchzor wipe`
-Removes all trace of this folder's contents from the server
-
-## .synchzor files
-Each directory you sync has a `.synchzor` file created in the root.  This file has JSON which looks like the following:
-
-```json
-{
-  "host":              "https://s3.aws.com",
-  "access-key":        "abc123",
-  "access-key-secret": "abc123",
-  "bucket":            "my-backups",
-  "remote-directory"   "photos"
-}
 ```
-
-You can change the `remote-directory` to link to something else if you want to join a folder by a different name.
-
-## Automatic / Daemon
-coming soon.  Use cron for now :p
+docker run -it --rm \
+  # -p 8000:8000 \
+  # -p 55555:55555 \
+  --name='synchzor_docker' \
+  --env AWSACCESSKEYID=XXX \
+  --env AWSSECRETACCESSKEY=XXX \
+  --env S3_BUCKET=XXX \
+  --env SYNCHZOR_USER=evantahler \
+  --env SYNCHZOR_FOLDER=art \
+  --env BTSYNC_SHARE_SECRET='XXX' \
+  --privileged \
+  'synchzor/synchzor'
+```

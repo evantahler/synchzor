@@ -1,8 +1,2 @@
-pids/*
-tmp/*
-log/*
-cache/*
-node_modules/*
-.DS_Store
-npm-debug.log
-.tddium*
+config/s3.json
+secrets.md
